@@ -10,11 +10,12 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.services.auth_service import require_operator
 
 router = APIRouter(prefix="/customers", tags=["musteriler"])
 
 
-@router.get("", response_model=list[schemas.CustomerOut])
+@router.get("", response_model=list[schemas.CustomerOut], dependencies=[Depends(require_operator)])
 def list_customers(db: Session = Depends(get_db)):
     """Tum musteri klasorlerini, her birindeki farkli foto sayisiyla listeler."""
     # Musteri basina distinct foto sayisi (ayni fotoda ayni kisinin 2 yuzu olmaz ama garanti)
@@ -40,7 +41,7 @@ def list_customers(db: Session = Depends(get_db)):
     ]
 
 
-@router.get("/{customer_id}/photos", response_model=list[schemas.PhotoOut])
+@router.get("/{customer_id}/photos", response_model=list[schemas.PhotoOut], dependencies=[Depends(require_operator)])
 def customer_photos(customer_id: int, db: Session = Depends(get_db)):
     """Bir musteri klasorundeki fotograflari listeler."""
     customer = db.get(models.Customer, customer_id)

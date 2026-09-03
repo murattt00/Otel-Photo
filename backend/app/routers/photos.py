@@ -17,6 +17,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Request,
     UploadFile,
 )
 from fastapi.responses import FileResponse
@@ -27,6 +28,7 @@ from app import models, schemas
 from app.config import settings
 from app.database import get_db
 from app.services import images
+from app.services.auth_service import is_logged_in, require_operator
 
 router = APIRouter(prefix="/photos", tags=["fotograflar"])
 
@@ -37,7 +39,7 @@ def _is_allowed_image(filename: str) -> bool:
     return Path(filename).suffix.lower() in settings.ALLOWED_IMAGE_EXTS
 
 
-@router.post("/upload", response_model=schemas.UploadResult)
+@router.post("/upload", response_model=schemas.UploadResult, dependencies=[Depends(require_operator)])
 def upload_photos(
     photographer_id: int = Form(..., description="Fotolari ceken fotografcinin id'si"),
     files: list[UploadFile] = File(..., description="Yuklenecek fotograflar"),
@@ -100,7 +102,7 @@ def upload_photos(
     )
 
 
-@router.post("/ingest", response_model=schemas.IngestResult)
+@router.post("/ingest", response_model=schemas.IngestResult, dependencies=[Depends(require_operator)])
 def ingest_folder(data: schemas.IngestRequest, db: Session = Depends(get_db)):
     """Sunucudaki bir klasordeki fotograflari YERINDE isler (kopyalamadan).
 
@@ -150,7 +152,7 @@ def ingest_folder(data: schemas.IngestRequest, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/durum")
+@router.get("/durum", dependencies=[Depends(require_operator)])
 def processing_status(db: Session = Depends(get_db)):
     """Isleme kuyrugu ozeti: kac foto bekliyor/isleniyor/bitti/hatali."""
     rows = db.query(models.Photo.status, func.count()).group_by(models.Photo.status).all()
@@ -164,7 +166,7 @@ def processing_status(db: Session = Depends(get_db)):
     }
 
 
-@router.get("", response_model=list[schemas.PhotoOut])
+@router.get("", response_model=list[schemas.PhotoOut], dependencies=[Depends(require_operator)])
 def list_photos(db: Session = Depends(get_db)):
     """Tum fotograflari listeler (islenme durumu dahil)."""
     return db.query(models.Photo).order_by(models.Photo.id).all()
@@ -173,6 +175,7 @@ def list_photos(db: Session = Depends(get_db)):
 @router.get("/{photo_id}/image")
 def photo_image(
     photo_id: int,
+    request: Request,
     filigran: bool = True,
     boyut: str = "galeri",
     db: Session = Depends(get_db),
@@ -185,6 +188,11 @@ def photo_image(
     - filigran=False, boyut=galeri-> filigransiz 1000px (operator onizleme) [onbellek]
     - filigran=False, boyut=tam   -> orijinal dosya (baski icin)
     """
+    # GUVENLIK: filigranli surumler kiosk icin aciktir (musteri onlari zaten gorecek),
+    # ama FILIGRANSIZ orijinal satilabilir uruntur -- sadece giris yapmis operator alabilir.
+    if not filigran and not is_logged_in(request, db):
+        raise HTTPException(status_code=401, detail="Filigransiz gorsel icin operator girisi gerekli.")
+
     photo = db.get(models.Photo, photo_id)
     if photo is None:
         raise HTTPException(status_code=404, detail="Fotograf bulunamadi.")

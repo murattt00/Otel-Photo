@@ -15,7 +15,7 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -24,6 +24,7 @@ from app import models, schemas
 from app.config import settings
 from app.database import get_db
 from app.services.order_export import export_order, order_folder
+from app.services.auth_service import is_logged_in, require_operator
 
 router = APIRouter(prefix="/orders", tags=["siparisler"])
 
@@ -119,6 +120,7 @@ def create_order(
 
 @router.get("", response_model=list[schemas.OrderOut])
 def list_orders(
+    request: Request,
     status: str | None = None,
     customer_id: int | None = None,
     email: str | None = None,
@@ -126,7 +128,18 @@ def list_orders(
     offset: int = 0,
     db: Session = Depends(get_db),
 ):
-    """Siparisleri listeler (en yeni ustte). limit/offset ile sayfalama (operator icin)."""
+    """Siparisleri listeler (en yeni ustte). limit/offset ile sayfalama (operator icin).
+
+    GUVENLIK: kiosk bu ucu SADECE kendi musterisi icin cagirir (?customer_id=... veya
+    ?email=...). Filtresiz cagri = TUM otelin siparisleri + e-postalari demektir; bu yuzden
+    filtre yoksa operator girisi sarttir.
+    """
+    if customer_id is None and not email and not is_logged_in(request, db):
+        raise HTTPException(
+            status_code=401,
+            detail="Tum siparisleri listelemek icin operator girisi gerekli.",
+        )
+
     query = db.query(models.Order)
     if status:
         query = query.filter(models.Order.status == status)
@@ -143,7 +156,7 @@ def list_orders(
     return [_serialize(o) for o in query.all()]
 
 
-@router.get("/sayilar")
+@router.get("/sayilar", dependencies=[Depends(require_operator)])
 def order_counts(db: Session = Depends(get_db)):
     """Sekme rozetleri + sayfalama icin durum bazli siparis sayilari."""
     rows = db.query(models.Order.status, func.count()).group_by(models.Order.status).all()
@@ -200,7 +213,7 @@ def update_order(
     return _serialize(order)
 
 
-@router.patch("/{order_id}/status", response_model=schemas.OrderOut)
+@router.patch("/{order_id}/status", response_model=schemas.OrderOut, dependencies=[Depends(require_operator)])
 def update_status(order_id: int, data: schemas.OrderStatusUpdate, db: Session = Depends(get_db)):
     """Operator siparis durumunu gunceller."""
     if data.status not in GECERLI_DURUMLAR:
@@ -218,7 +231,7 @@ def update_status(order_id: int, data: schemas.OrderStatusUpdate, db: Session = 
 
 # ---- Photoshop / duzenlenmis versiyon + teslim paketi ----
 
-@router.post("/{order_id}/items/{item_id}/edited", response_model=schemas.OrderOut)
+@router.post("/{order_id}/items/{item_id}/edited", response_model=schemas.OrderOut, dependencies=[Depends(require_operator)])
 def upload_edited(
     order_id: int,
     item_id: int,
@@ -246,7 +259,7 @@ def upload_edited(
     return _serialize(order)
 
 
-@router.get("/items/{item_id}/edited-image")
+@router.get("/items/{item_id}/edited-image", dependencies=[Depends(require_operator)])
 def edited_image(item_id: int, db: Session = Depends(get_db)):
     """Bir siparis kaleminin duzenlenmis (photoshop'lu) gorselini dondurur."""
     item = db.get(models.OrderItem, item_id)
@@ -255,7 +268,7 @@ def edited_image(item_id: int, db: Session = Depends(get_db)):
     return FileResponse(item.edited_path, media_type="image/jpeg")
 
 
-@router.post("/{order_id}/export")
+@router.post("/{order_id}/export", dependencies=[Depends(require_operator)])
 def export_order_folder(order_id: int, db: Session = Depends(get_db)):
     """Siparisin 'siparis_XXXX' klasorunu (yeniden) olusturur. Editorun makinesine paylasilan
     ORDERS_EXPORT_DIR altina yazar. Var olan (duzenlenmis) dosyalari ezmez."""
@@ -266,7 +279,7 @@ def export_order_folder(order_id: int, db: Session = Depends(get_db)):
     return {"klasor": path, "mesaj": "Siparis klasoru olusturuldu/guncellendi."}
 
 
-@router.get("/{order_id}/download")
+@router.get("/{order_id}/download", dependencies=[Depends(require_operator)])
 def download_package(order_id: int, db: Session = Depends(get_db)):
     """Siparisin TESLIM PAKETINI (zip) dondurur: her foto icin duzenlenmis varsa o, yoksa
     orijinal full-res. Operator bunu indirip WeTransfer'e atabilir / musteriye verebilir."""

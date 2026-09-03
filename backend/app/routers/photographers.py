@@ -9,11 +9,12 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.services.auth_service import require_operator
 
 router = APIRouter(prefix="/photographers", tags=["fotografcilar"])
 
 
-@router.post("", response_model=schemas.PhotographerOut, status_code=201)
+@router.post("", response_model=schemas.PhotographerOut, status_code=201, dependencies=[Depends(require_operator)])
 def create_photographer(data: schemas.PhotographerCreate, db: Session = Depends(get_db)):
     """Yeni fotografci ekler."""
     exists = db.query(models.Photographer).filter_by(username=data.username).first()
@@ -26,7 +27,7 @@ def create_photographer(data: schemas.PhotographerCreate, db: Session = Depends(
     return photographer
 
 
-@router.get("", response_model=list[schemas.PhotographerOut])
+@router.get("", response_model=list[schemas.PhotographerOut], dependencies=[Depends(require_operator)])
 def list_photographers(db: Session = Depends(get_db)):
     """Tum fotografcilari listeler (yukleme ekranindaki secim listesi icin)."""
     return db.query(models.Photographer).order_by(models.Photographer.name).all()

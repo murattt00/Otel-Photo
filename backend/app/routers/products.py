@@ -10,11 +10,12 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.services.auth_service import require_operator
 
 router = APIRouter(prefix="/products", tags=["urunler"])
 
 
-@router.post("", response_model=schemas.ProductOut, status_code=201)
+@router.post("", response_model=schemas.ProductOut, status_code=201, dependencies=[Depends(require_operator)])
 def create_product(data: schemas.ProductCreate, db: Session = Depends(get_db)):
     """Yeni urun/albuw turu ekler."""
     product = models.Product(**data.model_dump())
@@ -33,7 +34,7 @@ def list_products(sadece_aktif: bool = False, db: Session = Depends(get_db)):
     return query.order_by(models.Product.id).all()
 
 
-@router.patch("/{product_id}", response_model=schemas.ProductOut)
+@router.patch("/{product_id}", response_model=schemas.ProductOut, dependencies=[Depends(require_operator)])
 def update_product(product_id: int, data: schemas.ProductUpdate, db: Session = Depends(get_db)):
     """Urunu gunceller (sadece gonderilen alanlar)."""
     product = db.get(models.Product, product_id)
@@ -46,7 +47,7 @@ def update_product(product_id: int, data: schemas.ProductUpdate, db: Session = D
     return product
 
 
-@router.delete("/{product_id}", status_code=204)
+@router.delete("/{product_id}", status_code=204, dependencies=[Depends(require_operator)])
 def delete_product(product_id: int, db: Session = Depends(get_db)):
     """Urunu siler."""
     product = db.get(models.Product, product_id)

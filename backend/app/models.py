@@ -174,3 +174,37 @@ class OrderItem(Base):
 
     order: Mapped["Order"] = relationship(back_populates="items")
     photo: Mapped["Photo"] = relationship()
+
+
+class OperatorAuth(Base):
+    """Operator panelinin TEK paylasilan sifresi (ayri kullanici hesabi yok).
+
+    Neden .env'de degil DB'de: sifre panelden degistirilebilsin diye. .env'de tutulsaydi
+    degistirmek sunucudaki dosyayi yeniden yazmayi gerektirirdi.
+    Sifre asla duz metin saklanmaz: PBKDF2-HMAC-SHA256 + kayda ozel rastgele salt.
+    Tablo tek satir tutar (id=1); ilk aciliste varsayilan sifreyle olusturulur.
+    """
+    __tablename__ = "operator_auth"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    salt: Mapped[str] = mapped_column(String(64))
+    # Hala kurulum varsayilani mi kullaniliyor? Panelde "sifrenizi degistirin" uyarisi icin.
+    is_default: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class OperatorSession(Base):
+    """Giris yapmis operator oturumu -- cookie'deki token'in veritabani karsiligi.
+
+    Bellekte degil DB'de tutulur ki: (1) sunucu yeniden baslayinca operator tekrar giris
+    yapmak zorunda kalmasin, (2) "cikis" gercekten token'i gecersiz kilsin.
+    """
+    __tablename__ = "operator_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

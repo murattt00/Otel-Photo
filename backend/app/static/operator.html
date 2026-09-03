@@ -205,10 +205,55 @@
     background:var(--ink);color:#fff;padding:13px 22px;border-radius:999px;font-weight:600;
     opacity:0;transition:.3s;pointer-events:none;z-index:50;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  /* ---- Operator girisi ---- */
+  #login-scr{position:fixed;inset:0;z-index:300;background:linear-gradient(140deg,#0f2b30,#1a3f47);display:flex;align-items:center;justify-content:center;padding:20px;}
+  .login-card{background:var(--white);border-radius:var(--radius);box-shadow:0 20px 60px rgba(0,0,0,.35);padding:34px 30px;width:100%;max-width:380px;}
+  .login-card .lg-brand{font-size:34px;text-align:center;}
+  .login-card h2{margin:8px 0 4px;text-align:center;font-size:21px;color:var(--ink);}
+  .login-card .lg-sub{text-align:center;color:var(--muted);font-size:13px;margin-bottom:22px;}
+  .login-err{background:#fdecea;color:#c0392b;border-radius:9px;padding:10px 12px;font-size:13.5px;font-weight:600;margin-bottom:14px;display:none;}
+  .login-card .btn{width:100%;margin-top:14px;}
+  .side-auth{padding:10px 12px 0;display:flex;flex-direction:column;gap:6px;}
+  .side-auth button{background:transparent;border:none;color:#9fbfbd;font-family:var(--font);font-size:12.5px;font-weight:600;text-align:left;padding:7px 9px;border-radius:8px;cursor:pointer;}
+  .side-auth button:hover{background:rgba(255,255,255,.07);color:#fff;}
+  .pw-warn{background:#fff4e0;border:1px solid #ffd79a;color:#8a5a00;border-radius:10px;padding:11px 14px;font-size:13.5px;font-weight:600;margin-bottom:16px;}
 </style>
 </head>
 <body>
-<div class="app">
+
+<!-- ============ OPERATOR GIRIS EKRANI ============ -->
+<!-- Panel acilirken /auth/durum sorulur; giris yoksa bu ekran gosterilir, .app gizli kalir. -->
+<div id="login-scr" style="display:none">
+  <div class="login-card">
+    <div class="lg-brand">&#128451;&#65039;</div>
+    <h2>Operat&#246;r Giri&#351;i</h2>
+    <p class="lg-sub">Devam etmek i&#231;in &#351;ifrenizi girin</p>
+    <div class="login-err" id="login-err"></div>
+    <label for="login-pw">&#350;ifre</label>
+    <input type="password" id="login-pw" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()" />
+    <button class="btn btn-primary" onclick="doLogin()">Giri&#351; Yap</button>
+  </div>
+</div>
+
+<!-- ============ SIFRE DEGISTIRME ============ -->
+<div class="modal" id="pw-modal">
+  <div class="modal-box" style="max-width:420px">
+    <h2 style="margin-top:0">&#128273; &#350;ifre De&#287;i&#351;tir</h2>
+    <div class="login-err" id="pw-err"></div>
+    <label for="pw-cur">Mevcut &#351;ifre</label>
+    <input type="password" id="pw-cur" autocomplete="current-password" />
+    <label for="pw-new" style="margin-top:12px">Yeni &#351;ifre (en az 6 karakter)</label>
+    <input type="password" id="pw-new" autocomplete="new-password" />
+    <label for="pw-new2" style="margin-top:12px">Yeni &#351;ifre (tekrar)</label>
+    <input type="password" id="pw-new2" autocomplete="new-password" onkeydown="if(event.key==='Enter')doChangePassword()" />
+    <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closePwModal()">Vazge&#231;</button>
+      <button class="btn btn-primary" onclick="doChangePassword()">De&#287;i&#351;tir</button>
+    </div>
+  </div>
+</div>
+
+<div class="app" id="app-root" style="display:none">
   <aside class="sidebar">
     <div class="brand">🗂️<div class="bt"><b>Otel Foto</b><span>Operatör Paneli</span></div></div>
     <nav class="nav">
@@ -216,6 +261,10 @@
       <button class="nav-item" id="tab-btn-products" onclick="showTab('products')"><span class="ni-ic">🎁</span> Ürünler</button>
       <button class="nav-item" id="tab-btn-upload" onclick="showTab('upload')"><span class="ni-ic">📤</span> Fotoğraf Yükle</button>
     </nav>
+    <div class="side-auth">
+      <button onclick="openPwModal()">&#128273; &#350;ifre De&#287;i&#351;tir</button>
+      <button onclick="doLogout()">&#128682; &#199;&#305;k&#305;&#351; Yap</button>
+    </div>
     <div class="side-foot">Otel Fotoğraf Sistemi</div>
   </aside>
   <main class="main">
@@ -224,6 +273,9 @@
       <p id="page-sub">Gelen siparişleri takip edin ve hazırlayın</p>
     </header>
     <div class="content">
+      <div class="pw-warn" id="pw-warn" style="display:none">
+        &#9888;&#65039; H&#226;l&#226; kurulum &#351;ifresi kullan&#305;l&#305;yor. Soldaki <b>&#128273; &#350;ifre De&#287;i&#351;tir</b> ile kendi &#351;ifrenizi belirleyin.
+      </div>
   <!-- ============ URUNLER SEKMESI ============ -->
   <div id="tab-products" style="display:none">
     <div class="products-layout">
@@ -661,11 +713,97 @@ async function uploadEdited(orderId,itemId,input){
   input.value='';
 }
 
-showTab('orders');   // acilis: Siparisler sekmesi
+/* ---------------- OPERATOR GIRISI ---------------- */
+/* Oturum HttpOnly cookie'de tutulur; JS token'a hic dokunmaz. Panel acilirken
+   /auth/durum sorulur ve giris ekrani mi dashboard mu gosterilecegine karar verilir. */
 
-// Sayilari periyodik yenile (sidebar + sekme rozetleri); liste kaymasin diye otomatik
-// re-render YOK -- operator yeni sayiyi gorunce Yenile'ye basar.
-setInterval(refreshCounts, 15000);
+let sayimTimer = null;
+
+/* Herhangi bir istek 401 dondururse (oturum suresi doldu) otomatik giris ekranina don.
+   Boylece her fetch cagrisina tek tek kontrol eklemeye gerek kalmaz. */
+const _fetch = window.fetch;
+window.fetch = async function(...args){
+  const res = await _fetch(...args);
+  if(res.status === 401 && !String(args[0]).startsWith('/auth/')){
+    showLogin('Oturum s\u00fcresi doldu, tekrar giri\u015f yap\u0131n.');
+  }
+  return res;
+};
+
+function showLogin(mesaj){
+  if(sayimTimer){ clearInterval(sayimTimer); sayimTimer = null; }
+  document.getElementById('app-root').style.display='none';
+  document.getElementById('login-scr').style.display='flex';
+  const e=document.getElementById('login-err');
+  if(mesaj){ e.textContent=mesaj; e.style.display='block'; } else { e.style.display='none'; }
+  document.getElementById('login-pw').value='';
+  setTimeout(()=>document.getElementById('login-pw').focus(),50);
+}
+
+function showApp(varsayilanSifre){
+  document.getElementById('login-scr').style.display='none';
+  document.getElementById('app-root').style.display='flex';
+  document.getElementById('pw-warn').style.display = varsayilanSifre ? 'block' : 'none';
+  showTab('orders');   // acilis: Siparisler sekmesi
+  /* Sayilari periyodik yenile (sidebar + sekme rozetleri); liste kaymasin diye otomatik
+     re-render YOK -- operator yeni sayiyi gorunce Yenile'ye basar. */
+  if(!sayimTimer) sayimTimer = setInterval(refreshCounts, 15000);
+}
+
+async function doLogin(){
+  const sifre=document.getElementById('login-pw').value;
+  if(!sifre) return;
+  const err=document.getElementById('login-err');
+  try{
+    const res=await _fetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sifre})});
+    const d=await res.json().catch(()=>({}));
+    if(res.ok){ showApp(d.varsayilan_sifre); toast('Ho\u015f geldiniz \ud83d\udc4b'); }
+    else{ err.textContent=d.detail||'Giri\u015f ba\u015far\u0131s\u0131z.'; err.style.display='block'; document.getElementById('login-pw').select(); }
+  }catch(e){ err.textContent='Sunucuya ula\u015f\u0131lamad\u0131.'; err.style.display='block'; }
+}
+
+async function doLogout(){
+  try{ await _fetch('/auth/logout',{method:'POST'}); }catch(e){}
+  showLogin('');
+}
+
+function openPwModal(){
+  document.getElementById('pw-err').style.display='none';
+  ['pw-cur','pw-new','pw-new2'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('pw-modal').style.display='flex';
+  setTimeout(()=>document.getElementById('pw-cur').focus(),50);
+}
+function closePwModal(){ document.getElementById('pw-modal').style.display='none'; }
+
+async function doChangePassword(){
+  const cur=document.getElementById('pw-cur').value;
+  const yeni=document.getElementById('pw-new').value;
+  const yeni2=document.getElementById('pw-new2').value;
+  const err=document.getElementById('pw-err');
+  const goster=m=>{ err.textContent=m; err.style.display='block'; };
+  if(!cur||!yeni) return goster('T\u00fcm alanlar\u0131 doldurun.');
+  if(yeni.length<6) return goster('Yeni \u015fifre en az 6 karakter olmal\u0131.');
+  if(yeni!==yeni2) return goster('Yeni \u015fifreler birbiriyle uyu\u015fmuyor.');
+  try{
+    const res=await _fetch('/auth/sifre-degistir',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({mevcut_sifre:cur,yeni_sifre:yeni})});
+    const d=await res.json().catch(()=>({}));
+    if(res.ok){
+      closePwModal();
+      document.getElementById('pw-warn').style.display='none';
+      toast('\u015eifre de\u011fi\u015ftirildi \u2705');
+    } else goster(d.detail||'\u015eifre de\u011fi\u015ftirilemedi.');
+  }catch(e){ goster('Sunucuya ula\u015f\u0131lamad\u0131.'); }
+}
+
+/* Acilis: giris yapilmis mi? */
+(async function boot(){
+  try{
+    const res=await _fetch('/auth/durum');
+    const d=await res.json();
+    if(d.giris) showApp(d.varsayilan_sifre); else showLogin('');
+  }catch(e){ showLogin('Sunucuya ula\u015f\u0131lamad\u0131.'); }
+})();
 </script>
 </body>
 </html>

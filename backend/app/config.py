@@ -41,6 +41,14 @@ class Settings:
     # Otel adi: kiosk basligi ve filigranda kullanilir. .env'e HOTEL_NAME yazarak degistirilebilir.
     HOTEL_NAME: str = os.environ.get("HOTEL_NAME", "OTEL ADI")
 
+    # --- Operator girisi ---
+    # Ilk aciliste DB'ye yazilan kurulum sifresi. Sonrasinda sifre PANELDEN degistirilir
+    # (DB'de hash'li tutulur), bu deger artik kullanilmaz. Varsayilan kaldigi surece
+    # operator panelinde "sifrenizi degistirin" uyarisi gorunur.
+    OPERATOR_INITIAL_PASSWORD: str = os.environ.get("OPERATOR_INITIAL_PASSWORD", "otel123")
+    # Oturum suresi: bir vardiyayi rahat kapsasin, ertesi gun tekrar giris istesin.
+    SESSION_HOURS: int = int(os.environ.get("SESSION_HOURS", "12"))
+
     # --- Yukleme kurallari ---
     MAX_UPLOAD_MB: int = int(os.environ.get("MAX_UPLOAD_MB", "60"))  # tek foto ust siniri
     ALLOWED_IMAGE_EXTS: tuple[str, ...] = (".jpg", ".jpeg", ".png")

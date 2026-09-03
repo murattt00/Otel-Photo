@@ -156,3 +156,18 @@ class KioskScanResult(BaseModel):
     musteri_id: int | None = None
     benzerlik: float | None = None
     fotolar: list[KioskPhoto] = []
+
+
+# ---- Operator girisi ----
+class LoginIn(BaseModel):
+    sifre: str
+
+
+class SifreDegistirIn(BaseModel):
+    mevcut_sifre: str
+    yeni_sifre: str = Field(..., min_length=6, max_length=128)
+
+
+class AuthDurum(BaseModel):
+    giris: bool                 # su an giris yapilmis mi
+    varsayilan_sifre: bool      # hala kurulum varsayilani mi kullaniliyor (uyari icin)
