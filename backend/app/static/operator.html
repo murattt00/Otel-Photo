@@ -205,6 +205,17 @@
     background:var(--ink);color:#fff;padding:13px 22px;border-radius:999px;font-weight:600;
     opacity:0;transition:.3s;pointer-events:none;z-index:50;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  /* ---- Gonderim paketi ---- */
+  .btn-send{background:var(--brand);color:#fff;font-weight:800;border:none;border-radius:10px;padding:11px 20px;font-size:15px;cursor:pointer;box-shadow:0 6px 16px rgba(18,181,176,.3);font-family:var(--font);}
+  .btn-send:hover{filter:brightness(1.05);}
+  .btn-send:disabled{opacity:.6;cursor:default;}
+  .send-box{margin-top:14px;border-radius:12px;padding:14px 16px;font-size:14px;display:none;}
+  .send-box.ok{background:#e7f7ec;border:1px solid #b6e6c6;color:#166534;}
+  .send-box.warn{background:#fff4e0;border:1px solid #ffd79a;color:#8a5a00;}
+  .send-box .zipname{font-family:Consolas,monospace;font-weight:700;font-size:15px;}
+  .send-box .path{font-family:Consolas,monospace;font-size:12.5px;opacity:.85;word-break:break-all;margin-top:5px;}
+  .send-box .sb-row{margin-top:9px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+
   /* ---- Operator girisi ---- */
   #login-scr{position:fixed;inset:0;z-index:300;background:linear-gradient(140deg,#0f2b30,#1a3f47);display:flex;align-items:center;justify-content:center;padding:20px;}
   .login-card{background:var(--white);border-radius:var(--radius);box-shadow:0 20px 60px rgba(0,0,0,.35);padding:34px 30px;width:100%;max-width:380px;}
@@ -654,6 +665,10 @@ function openOrderDetail(id){
     ? `<button class="btn-ready" onclick="markStatusFromDetail(${o.id},'hazir')">✓ Hazır İşaretle</button>`
     : `<button class="btn-unready" onclick="markStatusFromDetail(${o.id},'yeni')">↩ Yeniden Yeni'ye Al</button>`;
   const emailBtn = o.email ? `<button class="copy" onclick="copyEmail(${JSON.stringify(o.email)},this)"><span>📋</span> Kopyala</button>` : '';
+  // Gonderim paketi sadece HAZIR siparislerde anlamli (editor isini bitirmis olmali)
+  const sendBtn = o.status==='hazir'
+    ? `<button class="btn-send" id="send-btn" onclick="gonderimeHazirla(${o.id})">&#128230; G&#246;nderime Haz&#305;rla</button>`
+    : '';
   document.getElementById('order-modal-body').innerHTML=`
     <div class="modal-head">
       <div>
@@ -668,7 +683,8 @@ function openOrderDetail(id){
     </div>
     ${summary}
     <div class="modal-photos">${photos}</div>
-    <div class="modal-actions">${actionBtn}</div>`;
+    <div class="modal-actions">${sendBtn}${actionBtn}</div>
+    <div class="send-box" id="send-box"></div>`;
   document.getElementById('order-modal').classList.add('show');
 }
 function closeOrderModal(){ document.getElementById('order-modal').classList.remove('show'); }
@@ -680,6 +696,54 @@ async function copyEmail(email,btn){
     toast('E-posta kopyalandı');
   }catch(e){ toast('Kopyalanamadı — elle seçin: '+email); }
 }
+/* Siparisi gonderime hazirlar: siparis_XXXX klasoru zip'lenip "gonderilecek" klasorune
+   dusurulur. Sistem GONDERMEZ -- operator zip'i alip istedigi yolla yollar. */
+async function gonderimeHazirla(orderId){
+  const btn=document.getElementById('send-btn');
+  const box=document.getElementById('send-box');
+  if(btn){ btn.disabled=true; btn.textContent='\u23f3 Haz\u0131rlan\u0131yor\u2026'; }
+  try{
+    const res=await fetch(`/orders/${orderId}/gonderime-hazirla`,{method:'POST'});
+    const d=await res.json().catch(()=>({}));
+    if(!res.ok){
+      box.className='send-box warn'; box.style.display='block';
+      box.innerHTML='\u26a0\ufe0f '+escapeHtml(d.detail||'Paket haz\u0131rlanamad\u0131.');
+      return;
+    }
+    const uyari = (d.duzenlenmemis && d.duzenlenmemis.length)
+      ? `<div style="margin-top:9px"><b>\u26a0\ufe0f ${d.duzenlenmemis.length} fotoğraf hiç düzenlenmemiş görünüyor</b>
+         <div style="font-size:12.5px;opacity:.9">${d.duzenlenmemis.map(escapeHtml).join(', ')} — orijinalleriyle aynı. Editör bitirdi mi?</div></div>`
+      : '<div style="margin-top:9px">\u2705 T\u00fcm foto\u011fraflar d\u00fczenlenmi\u015f.</div>';
+    box.className='send-box '+((d.duzenlenmemis&&d.duzenlenmemis.length)?'warn':'ok');
+    box.style.display='block';
+    box.innerHTML=`
+      <div><span class="zipname">\ud83d\udce6 ${escapeHtml(d.zip_adi)}</span>
+        &nbsp;·&nbsp; ${d.foto_sayisi} foto\u011fraf &nbsp;·&nbsp; <b>${d.boyut_mb} MB</b></div>
+      <div class="path">${escapeHtml(d.klasor)}</div>
+      ${uyari}
+      <div class="sb-row">
+        <button class="copy" onclick="copyText(${JSON.stringify(d.zip_yolu)},this)">\ud83d\udccb Klas\u00f6r yolunu kopyala</button>
+        ${d.email?`<button class="copy" onclick="copyText(${JSON.stringify(d.email)},this)">\ud83d\udccb E-posta kopyala</button>`:''}
+        <a class="copy" style="text-decoration:none" href="/orders/${orderId}/paket">\u2b07 Zip'i indir</a>
+      </div>
+      ${d.boyut_mb>20?'<div style="margin-top:9px;font-size:12.5px"><b>Not:</b> '+d.boyut_mb+' MB — mail eki limitini (~20-25 MB) aşıyor, WeTransfer/TransferNow ile gönderin.</div>':''}`;
+    toast('Paket haz\u0131r \ud83d\udce6');
+  }catch(e){
+    box.className='send-box warn'; box.style.display='block';
+    box.textContent='Sunucuya ula\u015f\u0131lamad\u0131.';
+  }finally{
+    if(btn){ btn.disabled=false; btn.innerHTML='\ud83d\udce6 G\u00f6nderime Haz\u0131rla'; }
+  }
+}
+
+async function copyText(metin,btn){
+  try{
+    await navigator.clipboard.writeText(metin);
+    if(btn){ const eski=btn.innerHTML; btn.innerHTML='\u2713 Kopyaland\u0131';
+      setTimeout(()=>{ btn.innerHTML=eski; },1600); }
+  }catch(e){ toast('Kopyalanamad\u0131: '+metin); }
+}
+
 async function markStatusFromDetail(id,status){
   await setStatus(id,status);   // PATCH + listeyi yeniler
   closeOrderModal();

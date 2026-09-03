@@ -71,6 +71,13 @@ class Settings:
         os.environ.get("ORDERS_EXPORT_DIR", str(DATA_DIR / "siparisler_export"))
     )
 
+    # Gonderime hazir paketler: operator "Gonderime Hazirla"ya basinca siparisin
+    # siparis_XXXX.zip'i buraya dusuyor. Operator bu klasordeki zip'i alip istedigi
+    # yolla (mail eki, WeTransfer, TransferNow...) musteriye gonderir.
+    GONDERILECEK_DIR: Path = Path(
+        os.environ.get("GONDERILECEK_DIR", str(DATA_DIR / "gonderilecek"))
+    )
+
     # --- Yuz tanima ayarlari (prototipten tasindi, ilerde gercek veriyle ayarlanacak) ---
     SIMILARITY_THRESHOLD: float = 0.40   # bu esigin ustundeki benzerlik ayni kisi sayilir
     MIN_DET_SCORE: float = 0.55          # tespit guven skoru; altindakiler elenir

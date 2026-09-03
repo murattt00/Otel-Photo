@@ -36,6 +36,21 @@ def _total(order: models.Order) -> float | None:
     return order.product.price
 
 
+def _ayikla(folder: Path, beklenen: set[str]) -> None:
+    """Siparise ait olmayan gorselleri _kaldirilan/ alt klasorune tasir."""
+    for f in folder.iterdir():
+        if not f.is_file() or f.name.startswith("_") or f.name in beklenen:
+            continue
+        if f.suffix.lower() not in {".jpg", ".jpeg", ".png", ".tif", ".tiff"}:
+            continue
+        hedef_klasor = folder / "_kaldirilan"
+        hedef_klasor.mkdir(exist_ok=True)
+        try:
+            f.replace(hedef_klasor / f.name)
+        except OSError:
+            pass
+
+
 def export_order(order_id: int) -> str | None:
     """Siparisi ORDERS_EXPORT_DIR/siparis_XXXX klasorune yazar. Kendi DB oturumunu acar
     (arka plan gorevi olarak da cagrilabilsin)."""
@@ -59,12 +74,15 @@ def export_order(order_id: int) -> str | None:
             "FOTOGRAFLAR ve YAPILACAK DUZENLEMELER:",
         ]
 
+        beklenen: set[str] = set()
+
         for i, it in enumerate(items, 1):
             photo = it.photo
             if photo is None:
                 continue
             ext = Path(photo.stored_path).suffix or ".jpg"
             name = f"{i:02d}_foto{photo.id}{ext}"
+            beklenen.add(name)
             dst = folder / name
             # Var olan dosyayi EZME (editorun duzenlemesini koru)
             if not dst.exists():
@@ -74,6 +92,11 @@ def export_order(order_id: int) -> str | None:
                     pass
             not_txt = f"NOT: {it.note}" if it.note else "(not yok)"
             satirlar.append(f"  {name}  ->  {not_txt}")
+
+        # Musteri siparisi duzenleyip foto CIKARDIYSA, o dosya klasorde kalmasin --
+        # yoksa editor artik siparise ait olmayan fotoyu duzenler ve teslim paketine girer.
+        # SILMIYORUZ (editorun emegi kaybolmasin): _kaldirilan/ alt klasorune tasiyoruz.
+        _ayikla(folder, beklenen)
 
         (folder / f"_SIPARIS_{order.id}_BILGI.txt").write_text(
             "\n".join(satirlar) + "\n", encoding="utf-8"

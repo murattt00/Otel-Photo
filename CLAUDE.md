@@ -267,7 +267,7 @@ Yüzlerce sipariş/gün için ölçekli operatör görünümü.
   - `SIMILARITY_THRESHOLD = 0.40` — eşleşme eşiği, gerçek veriyle ayarlanacak.
   - `MIN_DET_SCORE = 0.55`, `MIN_FACE_WIDTH_RATIO = 0.06` — arka plandaki küçük/belirsiz yüzleri eler.
 - `otel-foto-sistemi/backend/.env` — `DATABASE_URL` (artık `config.py` üzerinden kullanılıyor).
-- `otel-foto-sistemi/data/` — test verisi (örnek WhatsApp fotoları) + `raw_uploads/`,
+- `otel-foto-sistemi/data/` — test verisi (örnek WhatsApp fotoları) + `raw_uploads/`, `gonderilecek/` (hazır teslim zip'leri), `siparisler_export/`,
   `customer_folders/`, `debug_output/` klasörleri (gitignore'da, sadece `.gitkeep` takip ediliyor).
 
 ### Faz 3B — Operatör girişi / güvenlik (TAMAMLANDI, uçtan uca doğrulandı)
@@ -307,6 +307,44 @@ paneli 1-2 kişi kullanıyor, rol sistemi bu ölçekte gereksiz).
   olduğu için şimdilik ertelendi.
 - **Cookie notu:** LAN'da düz HTTP kullanıldığı için cookie `secure=False`. HTTPS'e geçilirse
   `secure=True` yapılmalı (`routers/auth.py`).
+
+### Faz 3C — Gönderim paketi + iletişim kopukluğunun çözümü (TAMAMLANDI, doğrulandı)
+**Çözülen sorun:** sistemde iki ayrı düzenleme yolu vardı ve birbirlerinden habersizlerdi —
+(A) operatör panelden düzenlenmiş fotoyu yükler → `OrderItem.edited_path`; (B) editör
+`siparis_XXXX` klasöründe dosyayı **yerinde** düzenler → sistem bunu hiç görmezdi. Eski zip ucu
+sadece (A)'ya bakıyordu, yani editör (B) ile çalışırsa müşteriye **düzenlenmemiş orijinaller**
+gidiyordu, sessizce.
+
+**Karar: teslimatın TEK KAYNAĞI artık sipariş klasörüdür** (`ORDERS_EXPORT_DIR/siparis_XXXX`).
+Editör orada ne bıraktıysa müşteriye o gider. Panelden yükleme yolu da aynı klasöre aktığı
+sürece iki yol tek noktada buluşur.
+
+- `config.GONDERILECEK_DIR` (.env ile değiştirilebilir; varsayılan `data/gonderilecek`).
+- `services/delivery.py` — `paket_hazirla(db, order)`: sipariş klasöründeki görselleri
+  (`_` ile başlayanlar ve `_kaldirilan/` hariç, izinli uzantılar) `siparis_XXXX.zip` olarak
+  GONDERILECEK_DIR'e yazar (ZIP_STORED). Döndürür: zip adı/yolu, foto sayısı, MB,
+  **`duzenlenmemis`** listesi, e-posta. `paket_yolu()`, `paket_durum()` de var.
+- **Düzenlendi mi tespiti:** export `shutil.copy2` kullandığı için dokunulmamış kopya
+  orijinalle **aynı boyut + aynı mtime**'a sahiptir. Biri farklıysa editör dosyaya dokunmuştur.
+  Böylece operatör hiç düzenlenmemiş bir siparişi yanlışlıkla gönderemez — panel uyarır.
+- `orders.py`: `POST /orders/{id}/gonderime-hazirla` (paketi üretir), `GET /orders/{id}/paket`
+  (zip'i tarayıcıya indirir). İkisi de operatör girişi ister.
+- **Bayat dosya ayıklama:** `order_export.py` → `_ayikla()`. Müşteri siparişi düzenleyip foto
+  çıkarınca eski dosya klasörde kalıyordu (editör artık siparişte olmayan fotoyu düzenliyordu ve
+  pakete giriyordu). Artık siparişe ait olmayan görseller `_kaldirilan/` alt klasörüne **taşınır**
+  (silinmez — editörün emeği kaybolmasın). Export hâlâ mevcut dosyayı **ezmez**.
+- **Operatör paneli:** sipariş detay modalinde, sadece **`hazir`** siparişlerde
+  **📦 Gönderime Hazırla** butonu. Basınca sonuç kutusu: zip adı · foto sayısı · MB · klasör yolu
+  (kopyala) · e-posta (kopyala) · ⬇ Zip'i indir. Hiç düzenlenmemiş foto varsa **sarı uyarı**;
+  paket 20 MB'ı aşarsa "mail eki limitini aşıyor, WeTransfer/TransferNow kullanın" notu.
+- **Sistem GÖNDERMEZ, paketi hazırlar** (bilinçli): SMTP hesabı, API anahtarı, spam/teslim edilme
+  derdi yok. Operatör zip'i alıp istediği yolla yollar (mail eki, WeTransfer, TransferNow).
+- **Test:** paket 3 foto → export yenile → bayat 2 dosya `_kaldirilan/`a taşındı → paket 1 foto;
+  editör fotoyu yerinde düzenledi → `duzenlenmemis: []` + zip 0.2→0.4 MB (düzenlenmiş sürüm
+  pakete girdi); export tekrar çalıştı → editörün dosyası **ezilmedi**; girişsiz 401. Hepsi geçti.
+- **Sonraki adım (isteğe bağlı):** `.eml` taslağı (`X-Unsent: 1` header'ı ile Outlook'ta
+  düzenlenebilir taslak olarak açılır, zip ekli) — sadece ~20 MB altı siparişlerde işe yarar.
+  Büyükler için bulut + link şart (müşteri otelden ayrılınca LAN linki ölür).
 
 ## Henüz Yapılmayanlar (yol haritası)
 

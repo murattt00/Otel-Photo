@@ -15,6 +15,7 @@ data/debug_output/*
 data/cache/*
 data/edited/*
 data/siparisler_export/*
+data/gonderilecek/*
 !data/raw_uploads/.gitkeep
 !data/customer_folders/.gitkeep
 !data/debug_output/.gitkeep

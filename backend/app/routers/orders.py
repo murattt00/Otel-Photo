@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from app.config import settings
 from app.database import get_db
+from app.services import delivery
 from app.services.order_export import export_order, order_folder
 from app.services.auth_service import is_logged_in, require_operator
 
@@ -304,3 +305,30 @@ def download_package(order_id: int, db: Session = Depends(get_db)):
     return FileResponse(
         zip_path, media_type="application/zip", filename=f"siparis_{order_id}_teslim.zip"
     )
+
+
+@router.post("/{order_id}/gonderime-hazirla", dependencies=[Depends(require_operator)])
+def gonderime_hazirla(order_id: int, db: Session = Depends(get_db)):
+    """Siparisi gonderime hazirlar: siparis_XXXX klasorunu zip'leyip GONDERILECEK_DIR'e koyar.
+
+    Teslimatin tek kaynagi siparis klasorudur -- editor orada ne biraktiysa pakete o girer
+    (bkz. services/delivery.py). Operator olusan zip'i alip istedigi yolla gonderir:
+    mail eki, WeTransfer, TransferNow... Sistem gondermez, sadece paketi hazirlar.
+    """
+    order = db.get(models.Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Siparis bulunamadi.")
+
+    sonuc = delivery.paket_hazirla(db, order)
+    if not sonuc.get("hazir"):
+        raise HTTPException(status_code=400, detail=sonuc.get("mesaj", "Paket hazirlanamadi."))
+    return sonuc
+
+
+@router.get("/{order_id}/paket", dependencies=[Depends(require_operator)])
+def paket_indir(order_id: int, db: Session = Depends(get_db)):
+    """Hazirlanmis gonderim zip'ini tarayiciya indirir (operator maile ek yapmak isterse)."""
+    zip_yolu = delivery.paket_yolu(order_id)
+    if not zip_yolu.exists():
+        raise HTTPException(status_code=404, detail="Once 'Gonderime Hazirla'ya basin.")
+    return FileResponse(zip_yolu, media_type="application/zip", filename=zip_yolu.name)
