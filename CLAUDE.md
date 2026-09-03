@@ -387,6 +387,10 @@ müşteri sipariş verir → 🆕 YENİ GELENLER sekmesine düşer
 - **Kodlama tuzağı:** `settings_service.py` projedeki tek Türkçe karakterli Python dosyasıydı ve
   Windows'ta cp1254 ile okunup mojibake üretiyordu. Proje konvansiyonuna dönüldü — **Python
   kaynakları ASCII**, kullanıcıya görünen Türkçe metinler UI'da (`KLASOR_META`, operator.html).
+- **Bayat paket tuzağı kapatıldı:** operatör "Gönderime Hazırla" dedikten SONRA müşteri kioskta
+  siparişi düzenlerse, gönderilecek klasöründeki zip artık yanlış içerik taşıyordu ve operatör
+  onu müşteriye gönderebilirdi. `PATCH /orders/{id}` artık varsa hazır zip'i **siliyor**;
+  operatör siparişi tekrar "hazır" yapıp yeniden paketliyor.
 - **Test:** ayar kaydet → export yeni klasöre gitti → varsayılana dön; geçersiz yol 400;
   yazılabilirlik testi; yeni↔hazır sayaçları; gönderime hazırla; `/download` 404; kiosk
   regresyonu (5 uç 200). Hepsi geçti.

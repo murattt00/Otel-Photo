@@ -209,6 +209,18 @@ def update_order(
 
     db.commit()
     db.refresh(order)
+
+    # TUZAK ONLEME: bu siparis icin daha once "Gonderime Hazirla" yapildiysa, gonderilecek
+    # klasorunde ARTIK GECERSIZ bir zip duruyor demektir (musteri foto ekledi/cikardi).
+    # Operator onu gorup yanlislikla musteriye gonderebilir -> bayat paketi siliyoruz.
+    # Operator siparisi tekrar "hazir" yapip yeniden paketleyecek.
+    eski_paket = delivery.paket_yolu(order.id)
+    if eski_paket.exists():
+        try:
+            eski_paket.unlink()
+        except OSError:
+            pass
+
     background.add_task(export_order, order.id)  # klasoru guncelle (eksik fotolari ekler)
     return _serialize(order)
 
