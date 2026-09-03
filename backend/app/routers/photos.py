@@ -168,6 +168,24 @@ def processing_status(db: Session = Depends(get_db)):
     }
 
 
+@router.post("/tekrar-dene", dependencies=[Depends(require_operator)])
+def hatali_fotolari_tekrar_dene(db: Session = Depends(get_db)):
+    """status='error' fotolari tekrar kuyruga alir (pending yapar).
+
+    Neden gerekli: worker sadece 'pending' fotolari isler. Bir foto (gecici DB hatasi,
+    bozuk dosya, disk sorunu) 'error'a dustugunde kendiliginden bir daha denenmiyordu ve
+    o fotonun yuzleri hicbir musteriye girmiyordu -- sessiz veri kaybi. Bu uc, operatorun
+    tek tikla hepsini yeniden denemesini saglar.
+    """
+    sayi = (
+        db.query(models.Photo)
+        .filter(models.Photo.status == "error")
+        .update({"status": "pending", "error": None}, synchronize_session=False)
+    )
+    db.commit()
+    return {"tekrar_kuyruga_alinan": sayi}
+
+
 @router.get("", response_model=list[schemas.PhotoOut], dependencies=[Depends(require_operator)])
 def list_photos(db: Session = Depends(get_db)):
     """Tum fotograflari listeler (islenme durumu dahil)."""

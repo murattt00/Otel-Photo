@@ -82,8 +82,7 @@ Müşteri ekranı: karşılama → kamera → yüz tara → eşleşen fotolar (f
 - **Test:** örnek foto /kiosk/scan'e gönderildi → müşteri 6, benzerlik 0.78, 2 foto döndü;
   filigranlı JPEG geçerli. Kamera/tarayıcı testi kullanıcıda (webcam gerekli).
 - **Kararlar:** tema=canlı/eğlenceli, tekrar gelen müşteri=yüz+e-posta, filigran=otel adı+önizleme.
-- **AÇIK:** gerçek otel adı (`HOTEL_NAME`, şu an "OTEL ADI" yer tutucu; `.env`'e HOTEL_NAME=... ile
-  değişir). Webcam tarayıcıda `localhost`/HTTPS ister (LAN'da IP ile kamera engellenebilir).
+- **ÇÖZÜLDÜ (Faz 3E):** otel adı artık operatör panelindeki Ayarlar sekmesinden değiştirilir. Webcam tarayıcıda `localhost`/HTTPS ister (LAN'da IP ile kamera engellenebilir).
 
 ### Aşama 2B — Ürün/albüm yönetimi, operatör tarafı (TAMAMLANDI, doğrulandı)
 - `backend/app/models.py` → `Product` modeli (name, description, price [TL float], photo_count
@@ -176,7 +175,7 @@ Faz B + C1 + D1 birlikte. 32 örnek fotoyla tekrar test → **12 müşteri (ayn�
   (gerçek 15MB fotolarda kazanç çok daha büyük).
 - `operator.html` sipariş önizlemeleri artık küçük filigransız önbelleği (`filigran=false&boyut=galeri`)
   kullanır; tıklayınca orijinal (`boyut=tam`) baskı için açılır.
-- **Not:** HOTEL_NAME değişirse filigranlı önbellek (`_gal/_full`) bayatlar → `data/cache/` temizlenmeli.
+- **Not:** otel adı değişince filigranlı önbellek (`_gal/_full`) artık OTOMATİK temizlenir (Faz 3E, `settings_service._filigran_onbellegini_temizle`).
 
 ### Ölçek Faz A — Yükleme dayanıklılığı (TAMAMLANDI, doğrulandı)
 - **A1 parçalı yükleme:** operatör paneli fotoları 25'erli gruplar hâlinde gönderir + ilerleme
@@ -394,6 +393,48 @@ müşteri sipariş verir → 🆕 YENİ GELENLER sekmesine düşer
 - **Test:** ayar kaydet → export yeni klasöre gitti → varsayılana dön; geçersiz yol 400;
   yazılabilirlik testi; yeni↔hazır sayaçları; gönderime hazırla; `/download` 404; kiosk
   regresyonu (5 uç 200). Hepsi geçti.
+
+### Faz 3E — Otel adı ayarı, şifre ekranı, hatalı foto kurtarma (TAMAMLANDI, doğrulandı)
+
+**🏨 Otel adı artık panelden ayarlanıyor** (Ayarlar sekmesi):
+- `settings_service.otel_adi()` / `otel_adi_ayarla(db, ad)` — `AppSetting` tablosunda `otel_adi`
+  anahtarı; öncelik **DB > .env (`HOTEL_NAME`) > "OTEL ADI"**.
+- `GET/PATCH /settings/otel-adi`. `images.py` ve `kiosk.py` artık sabit `settings.HOTEL_NAME`
+  yerine bunu okuyor.
+- **Filigran önbelleği otomatik temizleniyor:** isim değişince `data/cache/*_gal.jpg` ve
+  `*_full.jpg` siliniyor (üzerlerinde ESKİ isim yazılı). Filigransız `*_op.jpg` korunuyor.
+  Test: 39 dosya silindi → sonraki istekte yeni isimle yeniden üretildi. **Eski "cache'i elle
+  temizle" notu artık geçersiz — otomatik.**
+
+**Gönderim sonuç kutusu sadeleştirildi (kullanıcı isteği):** klasör yolu metni, "klasör yolunu
+kopyala", "e-posta kopyala" (zaten müşteri satırında var — mükerrerdi) ve "zip'i indir"
+kaldırıldı. Kalan: tek satır `📦 siparis_0007.zip · 2 fotoğraf · 0.7 MB → gönderilecek klasörüne
+düştü` + (varsa) düzenlenmemiş foto uyarısı. Uyarı bilinçli tutuldu — düzenlenmemiş sipariş
+göndermeyi engelleyen tek koruma o.
+
+**Şifre ekranı:**
+- **BUG düzeltildi:** şifre modali `class="modal-box"` kullanıyordu ama böyle bir CSS sınıfı
+  YOK → kutunun beyaz zemini gelmiyordu, yazılar karanlık overlay üstünde uçuşuyordu.
+  `modal-card`'a çevrildi; açma/kapama da diğer modaller gibi `.show` sınıfıyla.
+- **👁 Göster/gizle** butonu (giriş ekranında da), **Caps Lock uyarısı** (Türkçe klavyede en sık
+  giriş hatası), "değiştirince tüm oturumlar kapanır" bilgisi.
+- **Politika sıkılaştırıldı:** min 6 → **min 8**, sadece rakam olamaz, yaygın şifre listesi
+  (`auth_service.sifre_kurali`). Hem UI hem backend kontrol ediyor.
+
+**🔑 Şifre kurtarma (yeni):** `backend/app/sifre_sifirla.py`
+```
+../venv/Scripts/python.exe -m app.sifre_sifirla              # varsayilana (otel123) doner
+../venv/Scripts/python.exe -m app.sifre_sifirla YeniSifre1   # belirtilen sifreyi kurar
+```
+Tüm oturumları kapatır. Panelde "şifremi unuttum" akışı yok (tek paylaşılan şifre, e-posta
+gönderimi yok) — şifre unutulursa kurtarma yolu budur.
+
+**↻ Hatalı fotoğrafları tekrar deneme (yeni):** `POST /photos/tekrar-dene` → `status='error'`
+fotoları `pending` yapar. Worker sadece `pending` işlediği için hata alan foto bir daha asla
+denenmiyordu (sessiz veri kaybı). Panelde işleme durumu kutusunda hata varsa "↻ Tekrar dene"
+butonu çıkıyor. **Test: aylardır takılı 2 foto (11, 17) tekrar denendi → ikisi de işlendi,
+`error: 0`, müşteri sayısı 12 → 16.** (Eski BackgroundTasks döneminden kalma `folder_code`
+çakışmasıydı; tek worker tasarımında sorunsuz geçti.)
 
 ## Henüz Yapılmayanlar (yol haritası)
 

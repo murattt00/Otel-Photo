@@ -205,6 +205,16 @@
     background:var(--ink);color:#fff;padding:13px 22px;border-radius:999px;font-weight:600;
     opacity:0;transition:.3s;pointer-events:none;z-index:50;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  /* ---- Sifre alanlari ---- */
+  .pw-wrap{position:relative;display:flex;align-items:center;}
+  .pw-wrap input{padding-right:44px;}
+  .pw-eye{position:absolute;right:6px;background:transparent;border:none;cursor:pointer;font-size:17px;padding:6px 8px;border-radius:8px;opacity:.55;line-height:1;}
+  .pw-eye:hover{opacity:1;background:#eef2f5;}
+  .pw-eye.on{opacity:1;}
+  .caps-warn{display:none;background:#fff4e0;border:1px solid #ffd79a;color:#8a5a00;border-radius:8px;padding:8px 11px;font-size:12.5px;font-weight:700;margin-bottom:12px;}
+  .caps-warn.show{display:block;}
+  .pw-hint{margin-top:14px;font-size:12.5px;color:var(--muted);}
+
   /* ---- Ayarlar ---- */
   .set-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px 22px;margin-bottom:16px;}
   .set-card h3{margin:0 0 4px;font-size:16px;color:var(--ink);display:flex;align-items:center;gap:8px;}
@@ -265,23 +275,30 @@
     <h2>Operat&#246;r Giri&#351;i</h2>
     <p class="lg-sub">Devam etmek i&#231;in &#351;ifrenizi girin</p>
     <div class="login-err" id="login-err"></div>
+    <div class="caps-warn" id="login-caps">&#9888;&#65039; Caps Lock a&#231;&#305;k</div>
     <label for="login-pw">&#350;ifre</label>
-    <input type="password" id="login-pw" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()" />
+    <div class="pw-wrap"><input type="password" id="login-pw" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()" />
+      <button type="button" class="pw-eye" onclick="togglePw(this)" title="G&#246;ster/gizle">&#128065;</button></div>
     <button class="btn btn-primary" onclick="doLogin()">Giri&#351; Yap</button>
   </div>
 </div>
 
 <!-- ============ SIFRE DEGISTIRME ============ -->
-<div class="modal" id="pw-modal">
-  <div class="modal-box" style="max-width:420px">
+<div class="modal" id="pw-modal" onclick="if(event.target===this)closePwModal()">
+  <div class="modal-card" style="max-width:430px">
     <h2 style="margin-top:0">&#128273; &#350;ifre De&#287;i&#351;tir</h2>
     <div class="login-err" id="pw-err"></div>
+    <div class="caps-warn" id="pw-caps">&#9888;&#65039; Caps Lock a&#231;&#305;k</div>
     <label for="pw-cur">Mevcut &#351;ifre</label>
-    <input type="password" id="pw-cur" autocomplete="current-password" />
-    <label for="pw-new" style="margin-top:12px">Yeni &#351;ifre (en az 6 karakter)</label>
-    <input type="password" id="pw-new" autocomplete="new-password" />
+    <div class="pw-wrap"><input type="password" id="pw-cur" autocomplete="current-password" />
+      <button type="button" class="pw-eye" onclick="togglePw(this)" title="G&#246;ster/gizle">&#128065;</button></div>
+    <label for="pw-new" style="margin-top:12px">Yeni &#351;ifre (en az 8 karakter, sadece rakam olmas&#305;n)</label>
+    <div class="pw-wrap"><input type="password" id="pw-new" autocomplete="new-password" />
+      <button type="button" class="pw-eye" onclick="togglePw(this)" title="G&#246;ster/gizle">&#128065;</button></div>
     <label for="pw-new2" style="margin-top:12px">Yeni &#351;ifre (tekrar)</label>
-    <input type="password" id="pw-new2" autocomplete="new-password" onkeydown="if(event.key==='Enter')doChangePassword()" />
+    <div class="pw-wrap"><input type="password" id="pw-new2" autocomplete="new-password" onkeydown="if(event.key==='Enter')doChangePassword()" />
+      <button type="button" class="pw-eye" onclick="togglePw(this)" title="G&#246;ster/gizle">&#128065;</button></div>
+    <div class="pw-hint">&#128274; De&#287;i&#351;tirince t&#252;m cihazlardaki a&#231;&#305;k oturumlar kapan&#305;r.</div>
     <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
       <button class="btn btn-ghost" onclick="closePwModal()">Vazge&#231;</button>
       <button class="btn btn-primary" onclick="doChangePassword()">De&#287;i&#351;tir</button>
@@ -323,6 +340,17 @@
       yolu yazıp <b>Test Et</b> ile doğrulayın.
     </div>
     <div id="settings-list"><div class="empty">Yükleniyor…</div></div>
+
+    <div class="set-card">
+      <h3>🏨 Otel Adı</h3>
+      <div class="set-desc">Kiosk ekranının başlığında ve fotoğrafların üzerindeki filigranda görünür.
+        Değiştirince filigranlı önbellek otomatik temizlenir (fotoğraflar yeni isimle yeniden üretilir).</div>
+      <div class="set-row">
+        <input type="text" id="set-otel-adi" maxlength="60" placeholder="Örn: Sunrise Beach Resort" />
+        <button class="btn btn-mini btn-primary" onclick="kaydetOtelAdi()">Kaydet</button>
+      </div>
+      <div class="set-msg" id="msg-otel-adi"></div>
+    </div>
 
     <div class="set-card">
       <h3>🔑 Operatör Şifresi</h3>
@@ -447,8 +475,8 @@ function showTab(name){
   document.getElementById('page-sub').textContent=m[1];
   if(name==='orders') loadOrders();
   if(name==='products') loadProducts();
-  if(name==='upload') loadPhotographers();
-  if(name==='settings') loadSettings();
+  if(name==='upload'){ loadPhotographers(); startProcPolling(); }
+  if(name==='settings'){ loadSettings(); loadOtelAdi(); }
 }
 
 /* ---------------- AYARLAR (klasor yollari) ---------------- */
@@ -498,6 +526,51 @@ function setMsg(anahtar,ok,metin){
   const el=document.getElementById('msg-'+anahtar);
   el.className='set-msg '+(ok?'ok':'bad'); el.style.display='block'; el.textContent=metin;
 }
+async function loadOtelAdi(){
+  const d=await fetch('/settings/otel-adi').then(r=>r.json()).catch(()=>null);
+  if(d) document.getElementById('set-otel-adi').value=d.otel_adi||'';
+}
+async function kaydetOtelAdi(){
+  const ad=document.getElementById('set-otel-adi').value;
+  const el=document.getElementById('msg-otel-adi');
+  const res=await fetch('/settings/otel-adi',{method:'PATCH',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({otel_adi:ad})});
+  const d=await res.json().catch(()=>({}));
+  if(res.ok){
+    el.className='set-msg ok'; el.style.display='block';
+    el.textContent=`✅ Kaydedildi. ${d.silinen_onbellek} filigranlı önbellek dosyası temizlendi.`;
+    toast('Otel adı güncellendi');
+  } else { el.className='set-msg bad'; el.style.display='block'; el.textContent='⚠️ '+(d.detail||'Kaydedilemedi.'); }
+}
+
+/* Sifre alani: goster/gizle */
+function togglePw(btn){
+  const inp=btn.parentElement.querySelector('input');
+  const gizli = inp.type==='password';
+  inp.type = gizli ? 'text' : 'password';
+  btn.classList.toggle('on', gizli);
+  inp.focus();
+}
+
+/* Caps Lock uyarisi: Turkce klavye + caps lock en sik giris hatasi */
+document.addEventListener('keyup', e=>{
+  if(typeof e.getModifierState !== 'function') return;
+  const acik = e.getModifierState('CapsLock');
+  const id = (e.target && e.target.id)||'';
+  if(id==='login-pw') document.getElementById('login-caps').classList.toggle('show', acik);
+  if(id==='pw-cur'||id==='pw-new'||id==='pw-new2') document.getElementById('pw-caps').classList.toggle('show', acik);
+});
+
+/* Islenemeyen (error) fotolari tekrar kuyruga alir. Worker sadece 'pending' isledigi
+   icin bunlar aksi halde sonsuza kadar isaretsiz kalirdi. */
+async function tekrarDene(){
+  const res=await fetch('/photos/tekrar-dene',{method:'POST'});
+  const d=await res.json().catch(()=>({}));
+  if(res.ok) toast(`${d.tekrar_kuyruga_alinan} fotoğraf tekrar kuyruğa alındı`);
+  else toast('İşlem başarısız.');
+  startProcPolling();   // durum kutusunu yeniden calistir
+}
+
 async function testKlasor(anahtar){
   const yol=document.getElementById('set-'+anahtar).value;
   const d=await fetch('/settings/klasorler/test',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -606,7 +679,9 @@ async function startProcPolling(){
   const tick=async()=>{
     let d; try{ d=await fetch('/photos/durum').then(r=>r.json()); }catch(e){ return; }
     const kalan=d.pending+d.processing;
-    const errTxt = d.error ? ` <span class="err">• ${d.error} hata</span>` : '';
+    const errTxt = d.error
+      ? ` <span class="err">• ${d.error} hata</span> <button class="btn btn-mini btn-blue" onclick="tekrarDene()">↻ Tekrar dene</button>`
+      : '';
     if(kalan>0){
       box.innerHTML=`⏳ İşleniyor… ${d.done}/${d.toplam} tamamlandı, ${kalan} bekliyor${errTxt}`;
     }else{
@@ -836,23 +911,17 @@ async function gonderimeHazirla(orderId){
       box.innerHTML='\u26a0\ufe0f '+escapeHtml(d.detail||'Paket haz\u0131rlanamad\u0131.');
       return;
     }
-    const uyari = (d.duzenlenmemis && d.duzenlenmemis.length)
-      ? `<div style="margin-top:9px"><b>\u26a0\ufe0f ${d.duzenlenmemis.length} fotoğraf hiç düzenlenmemiş görünüyor</b>
-         <div style="font-size:12.5px;opacity:.9">${d.duzenlenmemis.map(escapeHtml).join(', ')} — orijinalleriyle aynı. Editör bitirdi mi?</div></div>`
-      : '<div style="margin-top:9px">\u2705 T\u00fcm foto\u011fraflar d\u00fczenlenmi\u015f.</div>';
-    box.className='send-box '+((d.duzenlenmemis&&d.duzenlenmemis.length)?'warn':'ok');
+    /* Sade sonuc: paket dustu + (varsa) duzenlenmemis foto uyarisi.
+       Yol/kopyala/indir butonlari KALDIRILDI -- operator zip'i klasorden aliyor,
+       e-posta zaten yukaridaki musteri satirinda kopyalanabiliyor. */
+    const eksik = d.duzenlenmemis && d.duzenlenmemis.length;
+    box.className='send-box '+(eksik?'warn':'ok');
     box.style.display='block';
     box.innerHTML=`
       <div><span class="zipname">\ud83d\udce6 ${escapeHtml(d.zip_adi)}</span>
-        &nbsp;·&nbsp; ${d.foto_sayisi} foto\u011fraf &nbsp;·&nbsp; <b>${d.boyut_mb} MB</b></div>
-      <div class="path">${escapeHtml(d.klasor)}</div>
-      ${uyari}
-      <div class="sb-row">
-        <button class="copy" onclick="copyText(${JSON.stringify(d.zip_yolu)},this)">\ud83d\udccb Klas\u00f6r yolunu kopyala</button>
-        ${d.email?`<button class="copy" onclick="copyText(${JSON.stringify(d.email)},this)">\ud83d\udccb E-posta kopyala</button>`:''}
-        <a class="copy" style="text-decoration:none" href="/orders/${orderId}/paket">\u2b07 Zip'i indir</a>
-      </div>
-      ${d.boyut_mb>20?'<div style="margin-top:9px;font-size:12.5px"><b>Not:</b> '+d.boyut_mb+' MB — mail eki limitini (~20-25 MB) aşıyor, WeTransfer/TransferNow ile gönderin.</div>':''}`;
+        &nbsp;·&nbsp; ${d.foto_sayisi} foto\u011fraf &nbsp;·&nbsp; <b>${d.boyut_mb} MB</b>
+        &nbsp;→&nbsp; g&#246;nderilecek klas&#246;r&#252;ne d&#252;&#351;t&#252;</div>
+      ${eksik?`<div style="margin-top:7px">\u26a0\ufe0f ${d.duzenlenmemis.length} foto\u011fraf hi\u00e7 d\u00fczenlenmemi\u015f: ${d.duzenlenmemis.map(escapeHtml).join(', ')}</div>`:''}`;
     toast('Paket haz\u0131r \ud83d\udce6');
   }catch(e){
     box.className='send-box warn'; box.style.display='block';
@@ -938,10 +1007,10 @@ async function doLogout(){
 function openPwModal(){
   document.getElementById('pw-err').style.display='none';
   ['pw-cur','pw-new','pw-new2'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('pw-modal').style.display='flex';
+  document.getElementById('pw-modal').classList.add('show');
   setTimeout(()=>document.getElementById('pw-cur').focus(),50);
 }
-function closePwModal(){ document.getElementById('pw-modal').style.display='none'; }
+function closePwModal(){ document.getElementById('pw-modal').classList.remove('show'); }
 
 async function doChangePassword(){
   const cur=document.getElementById('pw-cur').value;
@@ -950,7 +1019,8 @@ async function doChangePassword(){
   const err=document.getElementById('pw-err');
   const goster=m=>{ err.textContent=m; err.style.display='block'; };
   if(!cur||!yeni) return goster('T\u00fcm alanlar\u0131 doldurun.');
-  if(yeni.length<6) return goster('Yeni \u015fifre en az 6 karakter olmal\u0131.');
+  if(yeni.length<8) return goster('Yeni \u015fifre en az 8 karakter olmal\u0131.');
+  if(/^\d+$/.test(yeni)) return goster('\u015eifre sadece rakamlardan olu\u015famaz; harf de ekleyin.');
   if(yeni!==yeni2) return goster('Yeni \u015fifreler birbiriyle uyu\u015fmuyor.');
   try{
     const res=await _fetch('/auth/sifre-degistir',{method:'POST',headers:{'Content-Type':'application/json'},

@@ -165,7 +165,7 @@ class LoginIn(BaseModel):
 
 class SifreDegistirIn(BaseModel):
     mevcut_sifre: str
-    yeni_sifre: str = Field(..., min_length=6, max_length=128)
+    yeni_sifre: str = Field(..., min_length=8, max_length=128)
 
 
 class AuthDurum(BaseModel):

@@ -18,6 +18,7 @@ from app.config import settings
 from app.database import get_db
 from app.services.face_service import detect_faces_bytes
 from app.services.matching_service import find_best_customer
+from app.services.settings_service import otel_adi
 
 router = APIRouter(prefix="/kiosk", tags=["kiosk"])
 
@@ -33,7 +34,7 @@ def kiosk_page():
 @router.get("/info")
 def kiosk_info():
     """Arayuzun ihtiyac duydugu marka bilgileri."""
-    return {"hotel_name": settings.HOTEL_NAME}
+    return {"hotel_name": otel_adi()}
 
 
 def _customer_photos(db: Session, customer_id: int) -> list[models.Photo]:

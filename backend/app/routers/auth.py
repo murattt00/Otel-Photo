@@ -82,6 +82,10 @@ def sifre_degistir(
     if data.yeni_sifre == data.mevcut_sifre:
         raise HTTPException(status_code=400, detail="Yeni sifre eskisiyle ayni olamaz.")
 
+    hata = auth_service.sifre_kurali(data.yeni_sifre)
+    if hata:
+        raise HTTPException(status_code=400, detail=hata)
+
     auth_service.change_password(db, data.yeni_sifre)
 
     token = auth_service.create_session(db)

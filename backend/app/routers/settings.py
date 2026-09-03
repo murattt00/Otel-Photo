@@ -24,6 +24,21 @@ def klasorleri_listele():
     return settings_service.tum_durumlar()
 
 
+@router.get("/otel-adi")
+def otel_adi_getir():
+    """Kiosk basligi ve filigranda kullanilan otel adi."""
+    return {"otel_adi": settings_service.otel_adi()}
+
+
+@router.patch("/otel-adi")
+def otel_adi_ayarla(veri: dict, db: Session = Depends(get_db)):
+    """Otel adini degistirir. Filigranli onbellek otomatik temizlenir (eski isim silinsin)."""
+    sonuc = settings_service.otel_adi_ayarla(db, veri.get("otel_adi", ""))
+    if not sonuc["gecerli"]:
+        raise HTTPException(status_code=400, detail=sonuc["mesaj"])
+    return sonuc
+
+
 @router.post("/klasorler/test")
 def klasor_test(veri: dict):
     """Yolu KAYDETMEDEN dener: olusturulabiliyor mu, yazilabiliyor mu?"""

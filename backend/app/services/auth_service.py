@@ -167,3 +167,22 @@ def require_operator(request: Request, db: Session = Depends(get_db)) -> None:
     """
     if not is_logged_in(request, db):
         raise HTTPException(status_code=401, detail="Operator girisi gerekli.")
+
+
+# Panele giren kisi tum musteri e-postalarini ve filigransiz orijinalleri gorebiliyor;
+# bu yuzden "123456" gibi sifreler kabul edilmemeli.
+_YAYGIN_SIFRELER = {
+    "12345678", "123456789", "1234567890", "password", "parola", "sifre123",
+    "otel1234", "qwerty123", "11111111", "admin123", "otelfoto",
+}
+
+
+def sifre_kurali(sifre: str) -> str | None:
+    """Yeni sifre politikasi. Sorun varsa Turkce mesaj, yoksa None doner."""
+    if len(sifre) < 8:
+        return "Sifre en az 8 karakter olmali."
+    if sifre.isdigit():
+        return "Sifre sadece rakamlardan olusamaz; harf de ekleyin."
+    if sifre.lower() in _YAYGIN_SIFRELER:
+        return "Bu sifre cok yaygin, tahmin edilmesi kolay. Baska bir sifre secin."
+    return None

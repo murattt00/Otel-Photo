@@ -67,6 +67,62 @@ def klasor(anahtar: str) -> Path:
     return Path(deger) if deger else KLASORLER[anahtar]
 
 
+# --- Metin ayarlari (klasor olmayanlar) ---
+OTEL_ADI_ANAHTAR = "otel_adi"
+
+
+def otel_adi() -> str:
+    """Kiosk basliginda ve filigranda kullanilan otel adi (DB > .env > varsayilan)."""
+    _cache_gerekiyorsa_yukle()
+    return _cache.get(OTEL_ADI_ANAHTAR) or settings.HOTEL_NAME
+
+
+def otel_adi_ayarla(db: Session, ad: str) -> dict:
+    """Otel adini kaydeder ve FILIGRANLI onbellegi temizler.
+
+    Onbellek temizligi sart: {id}_gal.jpg / {id}_full.jpg dosyalarinin uzerinde ESKI otel
+    adi yazili. Silinmezse kiosk eski ismi gostermeye devam eder. Filigransiz operator
+    onizlemesi ({id}_op.jpg) etkilenmez, o durur.
+    """
+    ad = (ad or "").strip()
+    if not ad:
+        return {"gecerli": False, "mesaj": "Otel adi bos olamaz."}
+    if len(ad) > 60:
+        return {"gecerli": False, "mesaj": "Otel adi en fazla 60 karakter olabilir."}
+
+    kayit = db.get(models.AppSetting, OTEL_ADI_ANAHTAR)
+    if kayit is None:
+        db.add(models.AppSetting(key=OTEL_ADI_ANAHTAR, value=ad))
+    else:
+        kayit.value = ad
+    db.commit()
+    _cache_yukle(db)
+
+    silinen = _filigran_onbellegini_temizle()
+    return {
+        "gecerli": True,
+        "mesaj": "Otel adi guncellendi.",
+        "otel_adi": ad,
+        "silinen_onbellek": silinen,
+    }
+
+
+def _filigran_onbellegini_temizle() -> int:
+    """Filigranli turevleri (_gal / _full) siler. Sonraki istekte yeni isimle uretilirler."""
+    silinen = 0
+    cache = settings.CACHE_DIR
+    if not cache.exists():
+        return 0
+    for f in cache.glob("*.jpg"):
+        if f.stem.endswith("_gal") or f.stem.endswith("_full"):
+            try:
+                f.unlink()
+                silinen += 1
+            except OSError:
+                pass
+    return silinen
+
+
 def dogrula(yol: str) -> dict:
     """Yolu kaydetmeden once test eder: olusturulabiliyor mu, yazilabiliyor mu?"""
     if not yol or not yol.strip():

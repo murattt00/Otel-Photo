@@ -16,6 +16,7 @@ temizlenmeli (basit cozum). Ilerde dosya adina otel adi hash'i eklenebilir.
 from pathlib import Path
 
 from app.config import settings
+from app.services.settings_service import otel_adi
 from app.services.watermark import resized_jpeg, watermark_image
 
 _GALLERY_MAX = 1400
@@ -38,7 +39,7 @@ def gallery_path(stored_path: str, photo_id: int) -> Path:
     """Filigranli galeri turevi (max 1400px)."""
     return _ensure(
         _cache_path(photo_id, "gal"),
-        lambda: watermark_image(stored_path, settings.HOTEL_NAME, max_size=_GALLERY_MAX),
+        lambda: watermark_image(stored_path, otel_adi(), max_size=_GALLERY_MAX),
     )
 
 
@@ -46,7 +47,7 @@ def full_path(stored_path: str, photo_id: int) -> Path:
     """Filigranli tam boyut turevi (lightbox)."""
     return _ensure(
         _cache_path(photo_id, "full"),
-        lambda: watermark_image(stored_path, settings.HOTEL_NAME, max_size=None),
+        lambda: watermark_image(stored_path, otel_adi(), max_size=None),
     )
 
 
