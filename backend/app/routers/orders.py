@@ -11,7 +11,6 @@ Onemli: satilan her foto, cekildigi fotografciya (Photo.uploaded_by_id) baglidir
 """
 import os
 import shutil
-import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -239,8 +238,11 @@ def upload_edited(
     file: UploadFile = File(..., description="Photoshop'lu (duzenlenmis) foto"),
     db: Session = Depends(get_db),
 ):
-    """Operator, bir siparis fotosunun photoshop'lu halini yukler. Orijinal DEGISMEZ;
-    duzenlenmis versiyon order item'a baglanir. Teslimatta oncelik edited'de."""
+    """Operator, bir siparis fotosunun photoshop'lu halini yukler.
+
+    Dosya siparis klasorune (siparis_XXXX/NN_fotoX.ext) yazilir -- yani editorun elle
+    duzenledigi yerle AYNI yere. Orijinal (Photo.stored_path) degismez. Boylece ister
+    panelden yuklensin ister klasorde duzenlensin, teslim paketi tek kaynaktan uretilir."""
     item = db.get(models.OrderItem, item_id)
     if item is None or item.order_id != order_id:
         raise HTTPException(status_code=404, detail="Siparis kalemi bulunamadi.")
@@ -249,8 +251,17 @@ def upload_edited(
     if ext not in settings.ALLOWED_IMAGE_EXTS:
         raise HTTPException(status_code=400, detail="Sadece jpg/jpeg/png yuklenebilir.")
 
-    settings.EDITED_DIR.mkdir(parents=True, exist_ok=True)
-    dst = settings.EDITED_DIR / f"item{item_id}{ext}"
+    # Dosya DOGRUDAN siparis klasorune yazilir: teslim paketinin tek kaynagi orasi
+    # (bkz. services/delivery.py). Ayri bir "edited" klasorune yazilsaydi panelden
+    # yuklenen duzenleme musteriye hic gitmezdi.
+    order_items = sorted(
+        db.query(models.OrderItem).filter(models.OrderItem.order_id == order_id).all(),
+        key=lambda x: x.id,
+    )
+    sira = next((i for i, x in enumerate(order_items, 1) if x.id == item_id), 1)
+    klasor = order_folder(order_id)
+    klasor.mkdir(parents=True, exist_ok=True)
+    dst = klasor / f"{sira:02d}_foto{item.photo_id}{ext}"
     with open(dst, "wb") as f:
         shutil.copyfileobj(file.file, f)
     item.edited_path = str(dst)
@@ -279,32 +290,6 @@ def export_order_folder(order_id: int, db: Session = Depends(get_db)):
     path = export_order(order_id)
     return {"klasor": path, "mesaj": "Siparis klasoru olusturuldu/guncellendi."}
 
-
-@router.get("/{order_id}/download", dependencies=[Depends(require_operator)])
-def download_package(order_id: int, db: Session = Depends(get_db)):
-    """Siparisin TESLIM PAKETINI (zip) dondurur: her foto icin duzenlenmis varsa o, yoksa
-    orijinal full-res. Operator bunu indirip WeTransfer'e atabilir / musteriye verebilir."""
-    order = db.get(models.Order, order_id)
-    if order is None:
-        raise HTTPException(status_code=404, detail="Siparis bulunamadi.")
-
-    settings.CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    zip_path = settings.CACHE_DIR / f"siparis_{order_id}_teslim.zip"
-
-    # JPEG zaten sikisik -> ZIP_STORED (sikistirmasiz, hizli)
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_STORED) as z:
-        for i, it in enumerate(sorted(order.items, key=lambda x: x.id), 1):
-            edited = bool(it.edited_path and os.path.exists(it.edited_path))
-            src = it.edited_path if edited else (it.photo.stored_path if it.photo else None)
-            if not src or not os.path.exists(src):
-                continue
-            ext = Path(src).suffix or ".jpg"
-            arcname = f"{i:02d}_foto{it.photo_id}{'_duzenli' if edited else ''}{ext}"
-            z.write(src, arcname)
-
-    return FileResponse(
-        zip_path, media_type="application/zip", filename=f"siparis_{order_id}_teslim.zip"
-    )
 
 
 @router.post("/{order_id}/gonderime-hazirla", dependencies=[Depends(require_operator)])

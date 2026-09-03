@@ -205,6 +205,31 @@
     background:var(--ink);color:#fff;padding:13px 22px;border-radius:999px;font-weight:600;
     opacity:0;transition:.3s;pointer-events:none;z-index:50;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  /* ---- Ayarlar ---- */
+  .set-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px 22px;margin-bottom:16px;}
+  .set-card h3{margin:0 0 4px;font-size:16px;color:var(--ink);display:flex;align-items:center;gap:8px;}
+  .set-card .set-desc{color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:12px;}
+  .set-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .set-row input{flex:1;min-width:260px;font-family:Consolas,monospace;font-size:13.5px;}
+  .set-state{margin-top:9px;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .set-state.ok{color:#166534;} .set-state.bad{color:#c0392b;}
+  .set-msg{margin-top:9px;font-size:13px;border-radius:8px;padding:9px 12px;display:none;}
+  .set-msg.ok{background:#e7f7ec;color:#166534;} .set-msg.bad{background:#fdecea;color:#c0392b;}
+  .set-note{background:#eef5f6;border-left:4px solid var(--brand);border-radius:8px;padding:13px 16px;font-size:13.5px;color:var(--ink);line-height:1.6;margin-bottom:18px;}
+  .set-note code{background:#fff;padding:1px 6px;border-radius:4px;font-size:12.5px;}
+  .badge-def{background:#eef2f5;color:var(--muted);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700;}
+
+  /* ---- Siparis kart aksiyonlari ---- */
+  .oc-actions{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--line);background:#fafcfd;}
+  .oc-actions button{flex:1;border:none;border-radius:9px;padding:10px 8px;font-size:13.5px;font-weight:800;cursor:pointer;font-family:var(--font);transition:.15s;}
+  .oc-actions button:active{transform:scale(.97);}
+  .oc-ready{background:#1a9e4b;color:#fff;}
+  .oc-ready:hover{filter:brightness(1.07);}
+  .oc-pack{background:var(--brand);color:#fff;}
+  .oc-pack:hover{filter:brightness(1.07);}
+  .oc-back{background:#fff;color:var(--muted);border:1.5px solid var(--line)!important;flex:0 0 auto!important;padding:10px 14px!important;}
+  .oc-back:hover{border-color:var(--muted)!important;color:var(--ink);}
+
   /* ---- Gonderim paketi ---- */
   .btn-send{background:var(--brand);color:#fff;font-weight:800;border:none;border-radius:10px;padding:11px 20px;font-size:15px;cursor:pointer;box-shadow:0 6px 16px rgba(18,181,176,.3);font-family:var(--font);}
   .btn-send:hover{filter:brightness(1.05);}
@@ -271,9 +296,9 @@
       <button class="nav-item active" id="tab-btn-orders" onclick="showTab('orders')"><span class="ni-ic">🛎️</span> Siparişler <span class="nav-badge" id="nav-cnt" style="display:none">0</span></button>
       <button class="nav-item" id="tab-btn-products" onclick="showTab('products')"><span class="ni-ic">🎁</span> Ürünler</button>
       <button class="nav-item" id="tab-btn-upload" onclick="showTab('upload')"><span class="ni-ic">📤</span> Fotoğraf Yükle</button>
+      <button class="nav-item" id="tab-btn-settings" onclick="showTab('settings')"><span class="ni-ic">⚙️</span> Ayarlar</button>
     </nav>
     <div class="side-auth">
-      <button onclick="openPwModal()">&#128273; &#350;ifre De&#287;i&#351;tir</button>
       <button onclick="doLogout()">&#128682; &#199;&#305;k&#305;&#351; Yap</button>
     </div>
     <div class="side-foot">Otel Fotoğraf Sistemi</div>
@@ -287,6 +312,25 @@
       <div class="pw-warn" id="pw-warn" style="display:none">
         &#9888;&#65039; H&#226;l&#226; kurulum &#351;ifresi kullan&#305;l&#305;yor. Soldaki <b>&#128273; &#350;ifre De&#287;i&#351;tir</b> ile kendi &#351;ifrenizi belirleyin.
       </div>
+  <!-- ============ AYARLAR SEKMESI ============ -->
+  <div id="tab-settings" style="display:none">
+    <div class="set-note">
+      <b>Yollar sunucunun gözünden çözülür</b> — operatörün kendi bilgisayarından değil.
+      Sunucu ile aynı makinedeyseniz <code>D:\Siparisler</code> gibi normal bir yol yazın.
+      Başka bir bilgisayardaki klasörü hedefliyorsanız ağ yolu kullanın:
+      <code>\\EDITOR-PC\Siparisler</code>.
+      Tarayıcı güvenlik nedeniyle gerçek klasör yolu veremediği için "gözat" penceresi yok —
+      yolu yazıp <b>Test Et</b> ile doğrulayın.
+    </div>
+    <div id="settings-list"><div class="empty">Yükleniyor…</div></div>
+
+    <div class="set-card">
+      <h3>🔑 Operatör Şifresi</h3>
+      <div class="set-desc">Panele giriş şifresi. Değiştirince tüm cihazlardaki açık oturumlar kapanır.</div>
+      <button class="btn btn-primary" onclick="openPwModal()">Şifreyi Değiştir</button>
+    </div>
+  </div>
+
   <!-- ============ URUNLER SEKMESI ============ -->
   <div id="tab-products" style="display:none">
     <div class="products-layout">
@@ -391,9 +435,10 @@ const PAGE_META={
   orders:['Siparişler','Gelen siparişleri takip edin ve hazırlayın'],
   products:['Ürünler','Albüm ve paket türlerini yönetin'],
   upload:['Fotoğraf Yükle','Fotoğrafçı seçip yeni fotoğrafları sisteme aktarın'],
+  settings:['Ayarlar','Klasör yolları ve operatör şifresi'],
 };
 function showTab(name){
-  ['products','orders','upload'].forEach(t=>{
+  ['products','orders','upload','settings'].forEach(t=>{
     document.getElementById('tab-'+t).style.display = (t===name)?'block':'none';
     document.getElementById('tab-btn-'+t).classList.toggle('active',t===name);
   });
@@ -403,6 +448,74 @@ function showTab(name){
   if(name==='orders') loadOrders();
   if(name==='products') loadProducts();
   if(name==='upload') loadPhotographers();
+  if(name==='settings') loadSettings();
+}
+
+/* ---------------- AYARLAR (klasor yollari) ---------------- */
+/* Kullaniciya gorunen metinler BURADA durur; backend sadece anahtar + yol dondurur.
+   (Python kaynaklari ASCII kalsin diye -- proje konvansiyonu.) */
+const KLASOR_META={
+  siparis_klasoru:{
+    etiket:'Sipariş klasörleri',
+    aciklama:"Her sipariş için 'siparis_XXXX' klasörü buraya yazılır. Editör fotoğrafları BURADA düzenler. Teslim paketi de buradan üretilir."
+  },
+  gonderilecek_klasoru:{
+    etiket:'Gönderilecek paketler',
+    aciklama:"'Gönderime Hazırla'ya basınca siparis_XXXX.zip buraya düşer. Operatör paketi buradan alıp müşteriye gönderir."
+  },
+  yukleme_klasoru:{
+    etiket:'Yüklenen fotoğraflar',
+    aciklama:'Fotoğrafçılardan yüklenen orijinaller burada saklanır. Diskte en çok yer kaplayan klasör budur (~60 GB/gün).'
+  },
+};
+
+async function loadSettings(){
+  const list=document.getElementById('settings-list');
+  const ks=await fetch('/settings/klasorler').then(r=>r.json()).catch(()=>null);
+  if(!ks){ list.innerHTML='<div class="empty">Ayarlar yüklenemedi.</div>'; return; }
+  list.innerHTML=ks.map(k=>{
+    const iyi=k.mevcut&&k.yazilabilir;
+    const durum=iyi
+      ? '<span class="set-state ok">✅ Klasör erişilebilir ve yazılabilir</span>'
+      : (k.mevcut ? '<span class="set-state bad">⚠️ Klasör var ama YAZILAMIYOR</span>'
+                  : '<span class="set-state bad">⚠️ Klasör bulunamadı (kaydedince oluşturulur)</span>');
+    const meta=KLASOR_META[k.anahtar]||{etiket:k.anahtar,aciklama:''};
+    return `<div class="set-card" data-k="${k.anahtar}">
+      <h3>📁 ${escapeHtml(meta.etiket)} ${k.ozel?'':'<span class="badge-def">varsayılan</span>'}</h3>
+      <div class="set-desc">${escapeHtml(meta.aciklama)}</div>
+      <div class="set-row">
+        <input type="text" id="set-${k.anahtar}" value="${escapeHtml(k.yol)}" spellcheck="false" />
+        <button class="btn btn-mini btn-blue" onclick="testKlasor('${k.anahtar}')">Test Et</button>
+        <button class="btn btn-mini btn-primary" onclick="kaydetKlasor('${k.anahtar}')">Kaydet</button>
+        ${k.ozel?`<button class="btn btn-mini btn-ghost" onclick="sifirlaKlasor('${k.anahtar}')">Varsayılana dön</button>`:''}
+      </div>
+      ${durum}
+      <div class="set-msg" id="msg-${k.anahtar}"></div>
+    </div>`;
+  }).join('');
+}
+function setMsg(anahtar,ok,metin){
+  const el=document.getElementById('msg-'+anahtar);
+  el.className='set-msg '+(ok?'ok':'bad'); el.style.display='block'; el.textContent=metin;
+}
+async function testKlasor(anahtar){
+  const yol=document.getElementById('set-'+anahtar).value;
+  const d=await fetch('/settings/klasorler/test',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({yol})}).then(r=>r.json()).catch(()=>null);
+  if(!d) return setMsg(anahtar,false,'Sunucuya ulaşılamadı.');
+  setMsg(anahtar,d.gecerli,(d.gecerli?'✅ ':'⚠️ ')+d.mesaj);
+}
+async function kaydetKlasor(anahtar){
+  const yol=document.getElementById('set-'+anahtar).value;
+  const res=await fetch('/settings/klasorler/'+anahtar,{method:'PATCH',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({yol})});
+  const d=await res.json().catch(()=>({}));
+  if(res.ok){ toast('Klasör kaydedildi ✅'); loadSettings(); }
+  else setMsg(anahtar,false,'⚠️ '+(d.detail||'Kaydedilemedi.'));
+}
+async function sifirlaKlasor(anahtar){
+  const res=await fetch('/settings/klasorler/'+anahtar,{method:'DELETE'});
+  if(res.ok){ toast('Varsayılana döndürüldü'); loadSettings(); }
 }
 
 /* ---------------- FOTOGRAFCILAR + YUKLEME ---------------- */
@@ -635,8 +748,21 @@ function orderCard(o){
       <div class="oc-row">🖼️ ${o.foto_sayisi} fotoğraf</div>
       <div class="oc-row oc-email">✉️ ${escapeHtml(o.email||'—')}</div>
       <div class="oc-folder">📁 siparis_${String(o.id).padStart(4,'0')}</div>
-    </div>`;
+    </div>
+    <div class="oc-actions">${cardActions(o)}</div>`;
   return card;
+}
+
+/* Karttaki aksiyonlar sekmeye gore degisir -- tek basit senaryo:
+   YENI  : editor klasorde duzenler -> "Hazır" der
+   HAZIR : "Gönderime Hazırla" (zip duser) veya "Geri Al" (yeniye doner)
+   onclick'lerde stopPropagation: butona basinca detay modali acilmasin. */
+function cardActions(o){
+  if(o.status==='yeni'){
+    return `<button class="oc-ready" onclick="event.stopPropagation();setStatus(${o.id},'hazir')">✓ Hazır</button>`;
+  }
+  return `<button class="oc-pack" onclick="event.stopPropagation();openOrderDetail(${o.id});gonderimeHazirla(${o.id})">📦 Gönderime Hazırla</button>
+          <button class="oc-back" onclick="event.stopPropagation();setStatus(${o.id},'yeni')" title="Yeniden düzenlemeye al">↩ Geri Al</button>`;
 }
 
 // Detay penceresi
@@ -662,8 +788,8 @@ function openOrderDetail(id){
     ? `<div class="edit-summary">🖌️ <span><b>${editCount}</b> fotoğrafta düzenleme isteniyor</span> <span style="color:var(--muted);font-weight:500">(${o.foto_sayisi} fotoğrafın)</span></div>`
     : `<div class="edit-summary none">✓ Bu siparişte özel düzenleme isteği yok (${o.foto_sayisi} fotoğraf)</div>`;
   const actionBtn = o.status==='yeni'
-    ? `<button class="btn-ready" onclick="markStatusFromDetail(${o.id},'hazir')">✓ Hazır İşaretle</button>`
-    : `<button class="btn-unready" onclick="markStatusFromDetail(${o.id},'yeni')">↩ Yeniden Yeni'ye Al</button>`;
+    ? `<button class="btn-ready" onclick="markStatusFromDetail(${o.id},'hazir')">✓ Hazır</button>`
+    : `<button class="btn-unready" onclick="markStatusFromDetail(${o.id},'yeni')">↩ Geri Al</button>`;
   const emailBtn = o.email ? `<button class="copy" onclick="copyEmail(${JSON.stringify(o.email)},this)"><span>📋</span> Kopyala</button>` : '';
   // Gonderim paketi sadece HAZIR siparislerde anlamli (editor isini bitirmis olmali)
   const sendBtn = o.status==='hazir'
@@ -753,28 +879,6 @@ async function setStatus(id,status){
   const res=await fetch(`/orders/${id}/status`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
   if(res.ok){toast('Durum güncellendi: '+status.toUpperCase());loadOrders();}
   else{toast('Güncellenemedi.');}
-}
-// Siparis klasorunu (editor icin) olustur/yenile ve yolunu goster
-async function exportFolder(orderId){
-  toast('Sipariş klasörü hazırlanıyor…');
-  try{
-    const res=await fetch(`/orders/${orderId}/export`,{method:'POST'});
-    const d=await res.json();
-    if(res.ok){ alert('Sipariş klasörü hazır:\n\n'+d.klasor+'\n\nEditör bu klasörden fotoğrafları alıp düzenleyebilir.'); }
-    else{ toast(d.detail||'Klasör oluşturulamadı.'); }
-  }catch(e){ toast('Sunucuya ulaşılamadı.'); }
-}
-// Photoshop'lu (duzenlenmis) versiyonu yukle
-async function uploadEdited(orderId,itemId,input){
-  if(!input.files.length) return;
-  const fd=new FormData(); fd.append('file',input.files[0]);
-  toast('Düzenlenmiş fotoğraf yükleniyor…');
-  try{
-    const res=await fetch(`/orders/${orderId}/items/${itemId}/edited`,{method:'POST',body:fd});
-    if(res.ok){ toast('Düzenlenmiş versiyon kaydedildi ✅'); loadOrders(); }
-    else{ const e=await res.json().catch(()=>({})); toast(e.detail||'Yüklenemedi.'); }
-  }catch(e){ toast('Sunucuya ulaşılamadı.'); }
-  input.value='';
 }
 
 /* ---------------- OPERATOR GIRISI ---------------- */

@@ -24,6 +24,7 @@ from app.routers import (
     photographers,
     photos,
     products,
+    settings as settings_router,
 )
 from app.worker import start_worker, stop_worker
 
@@ -51,6 +52,7 @@ app.include_router(customers.router)
 app.include_router(kiosk.router)
 app.include_router(products.router)
 app.include_router(orders.router)
+app.include_router(settings_router.router)
 app.include_router(operator.router)
 
 

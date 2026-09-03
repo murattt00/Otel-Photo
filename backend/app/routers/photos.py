@@ -28,6 +28,7 @@ from app import models, schemas
 from app.config import settings
 from app.database import get_db
 from app.services import images
+from app.services.settings_service import klasor
 from app.services.auth_service import is_logged_in, require_operator
 
 router = APIRouter(prefix="/photos", tags=["fotograflar"])
@@ -54,7 +55,8 @@ def upload_photos(
     if photographer is None:
         raise HTTPException(status_code=404, detail="Fotografci bulunamadi.")
 
-    settings.RAW_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    yukleme_dir = klasor("yukleme_klasoru")
+    yukleme_dir.mkdir(parents=True, exist_ok=True)
 
     created_ids: list[int] = []
     skipped: list[str] = []
@@ -76,7 +78,7 @@ def upload_photos(
         db.add(photo)
         db.flush()
 
-        dst = settings.RAW_UPLOADS_DIR / f"{photo.id}_{upload.filename}"
+        dst = yukleme_dir / f"{photo.id}_{upload.filename}"
         with open(dst, "wb") as f:
             shutil.copyfileobj(upload.file, f)
 

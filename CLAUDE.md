@@ -346,6 +346,51 @@ sürece iki yol tek noktada buluşur.
   düzenlenebilir taslak olarak açılır, zip ekli) — sadece ~20 MB altı siparişlerde işe yarar.
   Büyükler için bulut + link şart (müşteri otelden ayrılınca LAN linki ölür).
 
+### Faz 3D — Ayarlar ekranı + akış sadeleştirmesi + temizlik (TAMAMLANDI, doğrulandı)
+
+**Tek basit senaryo (kullanıcı isteği — önceki hâli karışıktı):**
+```
+müşteri sipariş verir → 🆕 YENİ GELENLER sekmesine düşer
+   → editör siparis_XXXX klasöründe düzenler
+   → operatör kartta "✓ Hazır"a basar
+→ ✅ HAZIR sekmesi: "📦 Gönderime Hazırla"  ve  "↩ Geri Al"
+   → zip gönderilecek klasörüne düşer → operatör alıp istediği gibi gönderir
+```
+- **Aksiyonlar artık KARTTA** (modal içinde saklı değil). `cardActions(o)`: `yeni` → tek
+  yeşil "✓ Hazır"; `hazir` → "📦 Gönderime Hazırla" + "↩ Geri Al". `event.stopPropagation()`
+  ile butona basınca detay modali açılmaz. Modaldeki butonlar da aynı dile getirildi.
+
+**Ayarlar sekmesi (⚙️) — klasörler artık panelden değiştirilebilir:**
+- `models.AppSetting` (key/value) + migration `f52b342ba005`. Öncelik: **DB > .env > varsayılan**.
+- `services/settings_service.py` — `klasor(anahtar)` ayarlı yolu döndürür; bellek-içi cache
+  (order_folder/paket_yolu her çağrıda DB'ye gitmesin), ayar değişince tazelenir.
+  `dogrula(yol)`: klasörü oluşturmayı dener **ve gerçekten yazılabildiğini test eder**
+  (ağ paylaşımında klasör görünür ama yazılamaz olabilir — sık tuzak).
+- `routers/settings.py` (tamamı operatör girişi ister): `GET /settings/klasorler`,
+  `POST /settings/klasorler/test` (kaydetmeden dene), `PATCH /settings/klasorler/{anahtar}`
+  (geçersizse **400**, bozuk ayar kaydedilmez), `DELETE` (varsayılana dön).
+- Ayarlanabilen 3 klasör: `siparis_klasoru`, `gonderilecek_klasoru`, `yukleme_klasoru`.
+  `order_export`, `delivery`, `photos.upload` artık sabit config yerine bu ayarları okuyor.
+  **Sunucu yeniden başlatmaya gerek yok** — ayar anında etkili (test edildi).
+- **UI:** her klasör için kart (yol + Test Et + Kaydet + Varsayılana dön + canlı durum rozeti:
+  ✅ yazılabilir / ⚠️ yazılamıyor / ⚠️ bulunamadı). Üstte uyarı kutusu: **yollar SUNUCUNUN
+  gözünden çözülür**, başka makinedeki klasör için UNC gerekir (`\\EDITOR-PC\Siparisler`).
+  Tarayıcı gerçek klasör yolu veremediği için "gözat" penceresi YOK — yol elle yazılır.
+- Şifre değiştirme sidebar'dan **Ayarlar sekmesine** taşındı (sidebar'da sadece Çıkış kaldı).
+
+**Temizlik / düzeltilen mantık hataları:**
+- **`GET /orders/{id}/download` KALDIRILDI** — `/paket` ile aynı işi *farklı kaynaktan* yapıyordu
+  (`edited_path`'e bakıyordu, sipariş klasörüne değil) → iki farklı zip üretebiliyordu. Çelişki.
+- **Düzenlenmiş foto yükleme artık sipariş klasörüne yazıyor** (`siparis_XXXX/NN_fotoX.ext`),
+  eski `EDITED_DIR`'e değil. Önceden panelden yüklenen düzenleme teslim paketine hiç girmiyordu.
+- `operator.html`'de çağrılmayan `exportFolder()` / `uploadEdited()` fonksiyonları silindi.
+- **Kodlama tuzağı:** `settings_service.py` projedeki tek Türkçe karakterli Python dosyasıydı ve
+  Windows'ta cp1254 ile okunup mojibake üretiyordu. Proje konvansiyonuna dönüldü — **Python
+  kaynakları ASCII**, kullanıcıya görünen Türkçe metinler UI'da (`KLASOR_META`, operator.html).
+- **Test:** ayar kaydet → export yeni klasöre gitti → varsayılana dön; geçersiz yol 400;
+  yazılabilirlik testi; yeni↔hazır sayaçları; gönderime hazırla; `/download` 404; kiosk
+  regresyonu (5 uç 200). Hepsi geçti.
+
 ## Henüz Yapılmayanlar (yol haritası)
 
 - **SIRADAKI seçenekler:** (a) **Büyük tasarım revizyonu** (kullanıcı mevcut tasarımı beğenmedi —

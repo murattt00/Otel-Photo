@@ -208,3 +208,19 @@ class OperatorSession(Base):
     token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class AppSetting(Base):
+    """Calisirken degistirilebilen ayarlar (anahtar/deger).
+
+    Neden DB: klasor yollari gibi ayarlar operator panelinden degistirilebilsin diye.
+    .env'de kalsalardi degistirmek icin sunucu dosyasini duzenleyip yeniden baslatmak
+    gerekirdi. Oncelik: DB degeri > .env > kod icindeki varsayilan.
+    """
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(60), primary_key=True)
+    value: Mapped[str] = mapped_column(String(500))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

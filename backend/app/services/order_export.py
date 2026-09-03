@@ -20,12 +20,12 @@ from pathlib import Path
 import shutil
 
 from app import models
-from app.config import settings
+from app.services.settings_service import klasor
 from app.database import SessionLocal
 
 
 def order_folder(order_id: int) -> Path:
-    return settings.ORDERS_EXPORT_DIR / f"siparis_{order_id:04d}"
+    return klasor("siparis_klasoru") / f"siparis_{order_id:04d}"
 
 
 def _total(order: models.Order) -> float | None:

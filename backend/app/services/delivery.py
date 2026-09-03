@@ -24,8 +24,8 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app import models
-from app.config import settings
-from app.services.order_export import order_folder
+from app.services.order_export import export_order, order_folder
+from app.services.settings_service import klasor
 
 # Pakete girecek dosya turleri (editor PSD/tmp birakirsa musteriye gitmesin)
 _GONDERILEBILIR = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
@@ -36,15 +36,15 @@ KALDIRILAN_ALT_KLASOR = "_kaldirilan"
 
 def paket_yolu(order_id: int) -> Path:
     """Bir siparisin gonderim zip'inin tam yolu."""
-    return settings.GONDERILECEK_DIR / f"siparis_{order_id:04d}.zip"
+    return klasor("gonderilecek_klasoru") / f"siparis_{order_id:04d}.zip"
 
 
-def _gonderilecek_dosyalar(klasor: Path) -> list[Path]:
+def _gonderilecek_dosyalar(siparis_klasoru: Path) -> list[Path]:
     """Siparis klasorundeki gonderilebilir gorselleri (bilgi dosyasi ve _kaldirilan haric)."""
-    if not klasor.exists():
+    if not siparis_klasoru.exists():
         return []
     return sorted(
-        f for f in klasor.iterdir()
+        f for f in siparis_klasoru.iterdir()
         if f.is_file()
         and f.suffix.lower() in _GONDERILEBILIR
         and not f.name.startswith("_")
@@ -79,19 +79,25 @@ def paket_hazirla(db: Session, order: models.Order) -> dict:
     Donen sozlukte operator panelinin gosterdigi her sey var: zip adi/yolu, foto sayisi,
     boyut ve KAC FOTONUN HENUZ DUZENLENMEDIGI (uyari icin).
     """
-    klasor = order_folder(order.id)
-    dosyalar = _gonderilecek_dosyalar(klasor)
+    # Paketlemeden ONCE klasoru tazele: siparise ait olup eksik kalan foto varsa kopyalanir,
+    # siparisten cikarilmis bayat dosyalar _kaldirilan/ altina tasinir. Editorun duzenledigi
+    # dosyalar EZILMEZ. Boylece pakete her zaman siparisin GUNCEL hali girer.
+    export_order(order.id)
+
+    siparis_klasoru = order_folder(order.id)
+    dosyalar = _gonderilecek_dosyalar(siparis_klasoru)
 
     if not dosyalar:
         return {
             "hazir": False,
-            "mesaj": f"Siparis klasoru bos ya da bulunamadi: {klasor}",
-            "klasor": str(klasor),
+            "mesaj": f"Siparis klasoru bos ya da bulunamadi: {siparis_klasoru}",
+            "klasor": str(siparis_klasoru),
         }
 
     duzenlenmemis = [f.name for f in dosyalar if not _duzenlendi_mi(db, order, f)]
 
-    settings.GONDERILECEK_DIR.mkdir(parents=True, exist_ok=True)
+    hedef = klasor("gonderilecek_klasoru")
+    hedef.mkdir(parents=True, exist_ok=True)
     zip_yolu = paket_yolu(order.id)
 
     # JPEG zaten sikisik -> ZIP_STORED (sikistirma bosuna CPU yakar)
@@ -104,7 +110,7 @@ def paket_hazirla(db: Session, order: models.Order) -> dict:
         "hazir": True,
         "zip_adi": zip_yolu.name,
         "zip_yolu": str(zip_yolu),
-        "klasor": str(settings.GONDERILECEK_DIR),
+        "klasor": str(hedef),
         "foto_sayisi": len(dosyalar),
         "boyut_mb": round(boyut / 1024 / 1024, 1),
         "duzenlenmemis": duzenlenmemis,
