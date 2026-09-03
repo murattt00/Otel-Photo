@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Fotoğraflarınız</title>
+<style>
+  /* ============ MARKA RENKLERI (tek yerden degistirilebilir) ============ */
+  :root{
+    --brand-1:#12b5b0;      /* turkuaz */
+    --brand-2:#ff7a59;      /* mercan  */
+    --brand-3:#ffd166;      /* gunes sarisi (vurgu) */
+    --ink:#173039;          /* koyu yazi */
+    --white:#ffffff;
+    --radius:28px;
+    --shadow:0 18px 50px rgba(23,48,57,.22);
+    --font:'Segoe UI',system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    font-family:var(--font);color:var(--ink);
+    background:linear-gradient(135deg,var(--brand-1) 0%,var(--brand-2) 60%,var(--brand-3) 130%);
+    background-attachment:fixed;overflow-x:hidden;
+  }
+  .screen{
+    min-height:100dvh;display:none;flex-direction:column;align-items:center;justify-content:center;
+    padding:28px;text-align:center;
+  }
+  .screen.active{display:flex;animation:fade .45s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:none;}}
+
+  /* ---------- KARSILAMA ---------- */
+  .brand-badge{
+    font-size:15px;letter-spacing:3px;text-transform:uppercase;color:var(--white);
+    opacity:.9;font-weight:600;margin-bottom:10px;
+  }
+  .hotel-name{
+    color:var(--white);font-size:clamp(34px,7vw,66px);font-weight:800;line-height:1.05;
+    text-shadow:0 6px 24px rgba(0,0,0,.18);margin-bottom:18px;
+  }
+  .lead{color:var(--white);font-size:clamp(18px,3.4vw,26px);font-weight:500;opacity:.96;margin-bottom:44px;max-width:640px;}
+  .emoji-row{font-size:44px;margin-bottom:22px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.15));}
+
+  .btn{
+    border:none;cursor:pointer;font-family:var(--font);font-weight:700;
+    border-radius:999px;transition:transform .12s ease,box-shadow .2s ease,filter .2s ease;
+  }
+  .btn:active{transform:scale(.96);}
+  .btn-primary{
+    background:var(--white);color:var(--brand-2);font-size:clamp(22px,4vw,30px);
+    padding:22px 62px;box-shadow:var(--shadow);display:inline-flex;align-items:center;gap:14px;
+  }
+  .btn-primary .arrow{transition:transform .2s ease;}
+  .btn-primary:hover .arrow{transform:translateX(6px);}
+  .btn-ghost{
+    background:rgba(255,255,255,.18);color:var(--white);border:2px solid rgba(255,255,255,.6);
+    font-size:18px;padding:14px 32px;backdrop-filter:blur(4px);
+  }
+  .btn-soft{background:rgba(23,48,57,.06);color:var(--ink);font-size:17px;padding:13px 26px;}
+
+  /* ---------- KAMERA ---------- */
+  .card{
+    background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);
+    padding:26px;width:min(560px,94vw);
+  }
+  .cam-title{font-size:clamp(20px,3.6vw,28px);font-weight:800;margin-bottom:6px;}
+  .cam-sub{font-size:16px;color:#5b7480;margin-bottom:20px;}
+  .cam-frame{
+    position:relative;width:100%;aspect-ratio:4/3;border-radius:22px;overflow:hidden;
+    background:#0c1a1f;
+  }
+  #video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
+  .cam-ring{
+    position:absolute;inset:0;margin:auto;width:56%;aspect-ratio:1;border-radius:50%;
+    border:4px dashed rgba(255,255,255,.85);box-shadow:0 0 0 2000px rgba(12,26,31,.35);
+    animation:pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse{0%,100%{transform:scale(1);opacity:.85;}50%{transform:scale(1.05);opacity:1;}}
+  .cam-actions{display:flex;gap:12px;justify-content:center;margin-top:22px;flex-wrap:wrap;}
+  .btn-capture{background:var(--brand-2);color:var(--white);font-size:22px;padding:18px 48px;box-shadow:0 12px 30px rgba(255,122,89,.45);}
+
+  /* ---------- YUKLENIYOR ---------- */
+  .spinner{
+    width:64px;height:64px;border-radius:50%;border:6px solid rgba(255,255,255,.35);
+    border-top-color:var(--white);animation:spin 1s linear infinite;margin:0 auto 22px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .loading-text{color:var(--white);font-size:22px;font-weight:600;}
+
+  /* ---------- SONUC / GALERI ---------- */
+  #screen-result{justify-content:flex-start;padding-top:26px;}
+  .result-head{width:min(1100px,96vw);display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap;}
+  .result-title{color:var(--white);text-align:left;}
+  .result-title h2{font-size:clamp(26px,4.4vw,40px);font-weight:800;}
+  .result-title p{font-size:17px;opacity:.95;margin-top:4px;}
+  .gallery{
+    width:min(1100px,96vw);display:grid;gap:14px;
+    grid-template-columns:repeat(auto-fill,minmax(160px,1fr));padding-bottom:130px;
+  }
+  /* Onceki siparisler (tekrar gelen musteri) */
+  .past-orders{background:rgba(255,255,255,.96);border-radius:20px;padding:16px 18px;margin-bottom:14px;box-shadow:var(--shadow);}
+  .past-orders h3{font-size:17px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+  .po-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;flex-wrap:wrap;}
+  .po-head h3{font-size:17px;font-weight:800;display:flex;align-items:center;gap:8px;margin:0;}
+  .po-new{background:var(--brand-1);color:#fff;border:none;border-radius:999px;padding:9px 20px;font-weight:800;font-size:14px;cursor:pointer;font-family:var(--font);box-shadow:0 6px 16px rgba(18,181,176,.35);}
+  .po-new:active{transform:scale(.96);}
+  .po-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #eef3f4;flex-wrap:wrap;}
+  .po-item:last-child{border-bottom:none;}
+  .po-item.editing{background:#fff6f2;border:2px solid var(--brand-2);border-radius:12px;padding:10px 12px;margin:5px 0;border-bottom:2px solid var(--brand-2);}
+  .po-left b{font-size:15px;} .po-left div{font-size:13px;color:#6b8591;}
+  .po-status{font-size:12px;font-weight:700;padding:3px 12px;border-radius:999px;}
+  .po-yeni{background:#fff3e0;color:#d97706;} .po-hazir{background:#e8f1fb;color:#2b6cb0;} .po-teslim{background:#e7f7ec;color:#1a9e4b;}
+  .thumb{
+    position:relative;aspect-ratio:1;border-radius:18px;overflow:hidden;cursor:pointer;
+    background:rgba(255,255,255,.25);box-shadow:0 8px 22px rgba(23,48,57,.18);
+    transition:transform .12s ease;
+  }
+  .thumb:active{transform:scale(.97);}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .thumb .tick{
+    position:absolute;top:10px;right:10px;width:38px;height:38px;border-radius:50%;
+    background:rgba(255,255,255,.6);border:2px solid #fff;display:flex;align-items:center;justify-content:center;
+    font-size:20px;color:transparent;transition:.15s;z-index:2;
+  }
+  .thumb .zoom{
+    position:absolute;bottom:10px;right:10px;width:36px;height:36px;border-radius:50%;
+    background:rgba(23,48,57,.55);color:#fff;display:flex;align-items:center;justify-content:center;
+    font-size:17px;backdrop-filter:blur(2px);z-index:2;
+  }
+  .thumb.selected{outline:5px solid var(--brand-3);outline-offset:-5px;}
+  .thumb.selected .tick{background:var(--brand-3);color:var(--ink);}
+  .thumb.selected::after{content:"";position:absolute;inset:0;background:rgba(255,209,102,.14);pointer-events:none;}
+
+  /* ---------- LIGHTBOX (buyutme / inceleme) ---------- */
+  .lightbox{
+    position:fixed;inset:0;z-index:100;display:none;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(10,20,24,.94);padding:16px;
+  }
+  .lightbox.show{display:flex;animation:fade .25s ease;}
+  .lb-img-wrap{flex:1;display:flex;align-items:center;justify-content:center;width:100%;min-height:0;position:relative;}
+  #lb-img{max-width:96vw;max-height:78vh;object-fit:contain;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.5);}
+  .lb-loading{position:absolute;color:#fff;font-size:16px;opacity:.8;}
+  .lb-close{
+    position:absolute;top:16px;right:18px;width:48px;height:48px;border-radius:50%;border:none;cursor:pointer;
+    background:rgba(255,255,255,.15);color:#fff;font-size:24px;z-index:2;
+  }
+  .lb-counter{position:absolute;top:24px;left:22px;color:#fff;font-size:15px;opacity:.85;font-weight:600;}
+  .lb-nav{
+    position:absolute;top:50%;transform:translateY(-50%);width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;
+    background:rgba(255,255,255,.16);color:#fff;font-size:34px;line-height:1;display:flex;align-items:center;justify-content:center;z-index:2;
+  }
+  .lb-nav:active{transform:translateY(-50%) scale(.92);}
+  .lb-prev{left:10px;} .lb-next{right:10px;}
+  .lb-bar{padding:18px 0 6px;display:flex;gap:12px;align-items:center;justify-content:center;}
+  .btn-lb-select{background:var(--brand-3);color:var(--ink);font-size:20px;padding:16px 44px;box-shadow:0 10px 26px rgba(255,209,102,.4);}
+  .btn-lb-select.on{background:var(--brand-2);color:#fff;}
+
+  /* Alt aksiyon cubugu (secim) */
+  .actionbar{
+    position:fixed;left:0;right:0;bottom:0;display:none;align-items:center;justify-content:space-between;gap:14px;
+    padding:16px clamp(16px,4vw,40px);background:rgba(255,255,255,.96);backdrop-filter:blur(8px);
+    box-shadow:0 -10px 30px rgba(23,48,57,.15);
+  }
+  .actionbar.show{display:flex;}
+  .sel-count{font-size:18px;font-weight:700;}
+  .sel-count span{color:var(--brand-2);}
+
+  /* ---------- SIPARIS: TEK EKRAN 3 KOLON ---------- */
+  /* Tum ekran genisligini kullan: sol/sag paneller kenarlarda, galeri ortada genis */
+  #screen-result{justify-content:flex-start;align-items:stretch;padding:16px clamp(14px,2.2vw,40px) 26px;overflow-y:auto;}
+  .shop-top{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#fff;margin-bottom:12px;flex-wrap:wrap;}
+  .shop-top .result-title h2{font-size:clamp(22px,3.4vw,32px);font-weight:800;}
+  .shop-top .result-title p{font-size:14px;opacity:.95;}
+  .shop{display:grid;grid-template-columns:320px 1fr 340px;gap:18px;align-items:start;}
+  @media(max-width:980px){.shop{grid-template-columns:1fr;}}
+  .shop-side{background:#fff;border-radius:20px;box-shadow:var(--shadow);padding:16px;position:sticky;top:12px;}
+  @media(max-width:980px){.shop-side{position:static;}}
+  .shop-side h3{font-size:16px;font-weight:800;margin-bottom:12px;}
+  .shop-center{min-width:0;}
+  .shop-center .gallery{width:100%;padding-bottom:10px;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));}
+  /* Paketler 2 sutun (dikeyde az yer kaplasin) */
+  .prod-list{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .cart-items{display:flex;flex-direction:column;gap:8px;max-height:42vh;overflow-y:auto;margin-bottom:12px;}
+  .cart-empty{color:#6b8591;font-size:14px;padding:16px 4px;text-align:center;}
+  .cart-row{display:flex;gap:8px;align-items:center;}
+  .cart-row img{width:46px;height:46px;object-fit:cover;border-radius:8px;flex-shrink:0;}
+  .cart-row input{flex:1;min-width:0;border:1.5px solid #e5edf0;border-radius:8px;padding:7px 9px;font-size:13px;font-family:var(--font);}
+  .cart-row input:focus{outline:none;border-color:var(--brand-1);}
+  .cart-email-box{margin-bottom:10px;}
+  .cart-email-box label{display:block;font-size:13px;font-weight:700;color:var(--ink);margin-bottom:5px;}
+  .cart-total{margin:4px 0 12px;font-size:14px;color:#6b8591;font-weight:600;}
+  .cart-total b{font-size:22px;color:var(--ink);margin-left:8px;}
+  .prod{border:2px solid var(--line,#e5edf0);border-radius:16px;padding:13px;cursor:pointer;transition:.15s;position:relative;}
+  .prod:active{transform:scale(.98);}
+  .prod.sel{border-color:var(--brand-2);background:#fff6f2;}
+  .prod.sel::after{content:"✓";position:absolute;top:10px;right:12px;color:var(--brand-2);font-weight:800;font-size:18px;}
+  .prod .pn{font-weight:800;font-size:16px;margin-bottom:4px;}
+  .prod .pd{font-size:13px;color:#6b8591;margin-bottom:8px;min-height:18px;}
+  .prod .pp{font-weight:800;color:var(--brand-2);font-size:18px;}
+  .prod .pc{display:inline-block;margin-top:6px;font-size:12px;font-weight:700;background:#e8f6f5;color:var(--brand-1);padding:2px 10px;border-radius:999px;}
+  .prod .pc.free{background:#fff2ec;color:var(--brand-2);}
+  .prod-warn{margin-top:12px;font-size:14px;color:#e5503a;font-weight:600;display:none;}
+  .co-photo{display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid #eef3f4;}
+  .co-photo:last-child{border-bottom:none;}
+  .co-photo img{width:64px;height:64px;object-fit:cover;border-radius:12px;flex-shrink:0;}
+  .co-photo input{flex:1;border:1.5px solid #e5edf0;border-radius:10px;padding:10px 12px;font-size:14px;font-family:var(--font);}
+  .co-photo input:focus{outline:none;border-color:var(--brand-1);}
+  .co-email{width:100%;border:1.5px solid #e5edf0;border-radius:12px;padding:14px 16px;font-size:16px;font-family:var(--font);}
+  .co-email:focus{outline:none;border-color:var(--brand-1);}
+  .co-footer{
+    position:fixed;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:space-between;gap:14px;
+    padding:16px clamp(16px,4vw,40px);background:#fff;box-shadow:0 -10px 30px rgba(23,48,57,.15);z-index:20;
+  }
+  .co-total{font-size:15px;color:#6b8591;font-weight:600;}
+  .co-total b{display:block;font-size:24px;color:var(--ink);}
+  #co-total-sub{display:block;font-size:12px;color:var(--brand-2);font-weight:700;margin-top:2px;}
+  .btn-confirm{background:var(--brand-1);color:#fff;font-size:19px;padding:16px 38px;box-shadow:0 10px 26px rgba(18,181,176,.4);}
+  .btn-confirm:disabled{opacity:.5;filter:grayscale(.3);cursor:not-allowed;}
+  .co-remove{flex-shrink:0;width:36px;height:36px;border-radius:50%;border:none;background:#fdecea;color:#e5503a;font-size:22px;font-weight:800;cursor:pointer;line-height:1;}
+  .co-remove:active{transform:scale(.9);}
+
+  .msg-emoji{font-size:60px;margin-bottom:16px;}
+  .toast{
+    position:fixed;bottom:100px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--ink);color:#fff;padding:14px 24px;border-radius:999px;font-weight:600;
+    opacity:0;transition:.3s;pointer-events:none;z-index:50;max-width:90vw;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<!-- ========== 1) KARSILAMA ========== -->
+<section id="screen-welcome" class="screen active">
+  <div class="emoji-row">🌴 📸 ☀️</div>
+  <div class="brand-badge">Fotoğraf Hatıraları</div>
+  <h1 class="hotel-name" id="hotel-name">OTEL ADI</h1>
+  <p class="lead">Tatil anılarınız sizi bekliyor! Fotoğraflarınızı görmek için başlayın.</p>
+  <button class="btn btn-primary" onclick="goCamera()">
+    <span>BAŞLA</span><span class="arrow">→</span>
+  </button>
+  <button class="btn btn-ghost" style="margin-top:16px" onclick="showScreen('screen-email')">✉️ E-posta ile Siparişlerim</button>
+</section>
+
+<!-- ========== E-POSTA ILE GIRIS ========== -->
+<section id="screen-email" class="screen">
+  <div class="card" style="text-align:center">
+    <div class="cam-title">E-posta ile Giriş</div>
+    <div class="cam-sub">Daha önce sipariş verdiğiniz e-postayı girin.</div>
+    <input id="login-email" class="co-email" type="email" placeholder="ornek@eposta.com" style="text-align:center" />
+    <div class="cam-actions" style="margin-top:18px">
+      <button class="btn btn-soft" onclick="goWelcome()">← Geri</button>
+      <button class="btn btn-capture" onclick="emailLogin()">Bul</button>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 2) KAMERA ========== -->
+<section id="screen-camera" class="screen">
+  <div class="card">
+    <div class="cam-title">Yüzünüzü kameraya yaklaştırın</div>
+    <div class="cam-sub">Hazır olduğunuzda "Tara" düğmesine dokunun.</div>
+    <div class="cam-frame">
+      <video id="video" autoplay playsinline muted></video>
+      <div class="cam-ring"></div>
+    </div>
+    <div class="cam-actions">
+      <button class="btn btn-soft" onclick="goWelcome()">← Geri</button>
+      <button class="btn btn-capture" onclick="capture()">📷 Tara</button>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 3) YUKLENIYOR ========== -->
+<section id="screen-loading" class="screen">
+  <div class="spinner"></div>
+  <div class="loading-text">Yüzünüz taranıyor…</div>
+</section>
+
+<!-- ========== 4) SONUC (tek ekran: sol=paket, orta=galeri, sag=sepet) ========== -->
+<section id="screen-result" class="screen">
+  <div class="shop-top">
+    <div class="result-title">
+      <h2 id="result-title-text">Fotoğraflarınız 🎉</h2>
+      <p id="result-sub-text"></p>
+    </div>
+    <button class="btn btn-ghost" onclick="restart()">↺ Baştan Başla</button>
+  </div>
+  <div id="past-orders" class="past-orders" style="display:none"></div>
+  <div class="shop">
+    <!-- SOL: paket / albüm seçimi -->
+    <aside class="shop-side shop-left">
+      <h3>🎁 Paket Seçin</h3>
+      <div id="prod-grid" class="prod-list"></div>
+    </aside>
+    <!-- ORTA: fotoğraf galerisi -->
+    <main class="shop-center">
+      <div id="gallery" class="gallery"></div>
+    </main>
+    <!-- SAG: sepet (seçili fotolar + not + e-posta + toplam + onay) -->
+    <aside class="shop-side shop-right">
+      <h3>🛒 Sepetiniz (<span id="cart-count">0</span>)</h3>
+      <div id="cart-items" class="cart-items"></div>
+      <div class="cart-email-box">
+        <label>✉️ E-posta <span style="color:var(--brand-2)">*</span></label>
+        <input id="co-email" class="co-email" type="email" placeholder="ornek@eposta.com" />
+      </div>
+      <div id="prod-warn" class="prod-warn"></div>
+      <div class="cart-total">Toplam<b id="co-total-val">—</b><span id="co-total-sub"></span></div>
+      <button id="co-confirm" class="btn btn-confirm" style="width:100%" onclick="confirmOrder()">Siparişi Onayla ✓</button>
+    </aside>
+  </div>
+</section>
+
+<!-- ========== 5) EŞLEŞME YOK / HATA ========== -->
+<section id="screen-empty" class="screen">
+  <div class="msg-emoji" id="empty-emoji">🙈</div>
+  <h2 class="hotel-name" style="font-size:clamp(24px,4vw,38px)" id="empty-title">Fotoğraf bulunamadı</h2>
+  <p class="lead" id="empty-text"></p>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
+    <button class="btn btn-primary" onclick="goCamera()"><span>Tekrar Dene</span></button>
+    <button class="btn btn-ghost" onclick="goWelcome()">Ana Ekran</button>
+  </div>
+</section>
+
+<!-- ========== 7) BASARI ========== -->
+<section id="screen-success" class="screen">
+  <div class="emoji-row">🎉 ✅</div>
+  <h1 class="hotel-name" style="font-size:clamp(30px,6vw,52px)">Siparişiniz Alındı!</h1>
+  <p class="lead" id="success-text">Fotoğraflarınız hazırlanıyor. Çıktılarınızı kasadan teslim alabilirsiniz.</p>
+  <button class="btn btn-primary" onclick="restart()"><span>Bitir</span></button>
+</section>
+
+<!-- Buyutme / inceleme ekrani -->
+<div id="lightbox" class="lightbox">
+  <div class="lb-counter" id="lb-counter"></div>
+  <button class="lb-close" onclick="closeLightbox()">✕</button>
+  <button class="lb-nav lb-prev" onclick="lbNav(-1)">‹</button>
+  <div class="lb-img-wrap">
+    <div class="lb-loading" id="lb-loading">Yükleniyor…</div>
+    <img id="lb-img" alt="foto" />
+  </div>
+  <button class="lb-nav lb-next" onclick="lbNav(1)">›</button>
+  <div class="lb-bar">
+    <button class="btn btn-lb-select" id="lb-select" onclick="lbToggleSelect()">Seç</button>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+let stream = null;
+const selected = new Set();
+let currentPhotos = [];   // o an gosterilen galeri fotolari
+let lbIndex = 0;          // lightbox'ta acik olan fotonun sirasi
+let currentCustomerId = null;  // taramada bulunan musteri
+let selectedProduct = null;    // checkout'ta secilen urun/albuw
+let pastOrders = [];           // bu musterinin onceki siparisleri
+let editingOrder = null;       // duzenlenen siparis (null = yeni siparis)
+let notes = {};                // photoId -> not metni (yeniden cizimlerde korunur)
+
+/* ---- Ekran gecisleri ---- */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2600);
+}
+
+/* ---- Otel adini yukle ---- */
+fetch('/kiosk/info').then(r=>r.json()).then(d=>{
+  if(d.hotel_name){ document.getElementById('hotel-name').textContent=d.hotel_name; }
+}).catch(()=>{});
+
+/* ---- Kamera ---- */
+async function goCamera(){
+  showScreen('screen-camera');
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:960}},audio:false});
+    document.getElementById('video').srcObject = stream;
+  }catch(e){
+    showEmpty('📷','Kameraya erişilemedi','Tarayıcı kamera iznini reddetti ya da kamera bulunamadı. Lütfen görevliye danışın.');
+  }
+}
+function stopCamera(){
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+}
+function goWelcome(){ stopCamera(); showScreen('screen-welcome'); }
+
+/* ---- E-posta ile giris ---- */
+async function emailLogin(){
+  const email=document.getElementById('login-email').value.trim();
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ toast('Geçerli bir e-posta girin.'); return; }
+  showScreen('screen-loading');
+  document.querySelector('#screen-loading .loading-text').textContent='Siparişleriniz aranıyor…';
+  try{
+    const data=await fetch('/kiosk/by-email?email='+encodeURIComponent(email)).then(r=>r.json());
+    handleResult(data);
+  }catch(e){ showEmpty('⚠️','Bir şeyler ters gitti','Sunucuya ulaşılamadı. Lütfen tekrar deneyin.'); }
+}
+
+/* ---- Yakala & gonder ---- */
+async function capture(){
+  const video=document.getElementById('video');
+  if(!video.videoWidth){ toast('Kamera henüz hazır değil, birkaç saniye bekleyin.'); return; }
+  const canvas=document.createElement('canvas');
+  canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+  // Aynadaki degil, gercek kareyi yakala (yuz tanima icin)
+  canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+  stopCamera();
+  showScreen('screen-loading');
+  canvas.toBlob(async(blob)=>{
+    const fd=new FormData();
+    fd.append('file',blob,'scan.jpg');
+    try{
+      const res=await fetch('/kiosk/scan',{method:'POST',body:fd});
+      const data=await res.json();
+      handleResult(data);
+    }catch(e){
+      showEmpty('⚠️','Bir şeyler ters gitti','Sunucuya ulaşılamadı. Lütfen tekrar deneyin.');
+    }
+  },'image/jpeg',0.9);
+}
+
+/* ---- Sonuc: tek ekran (sol paket + orta galeri + sag sepet) ---- */
+function handleResult(data){
+  if(!data.eslesme){
+    if(data.sebep==='yuz_bulunamadi') showEmpty('🙂','Yüz algılanamadı',data.mesaj);
+    else showEmpty('🔍','Fotoğraf bulunamadı',data.mesaj);
+    return;
+  }
+  selected.clear(); notes={}; editingOrder=null;
+  currentPhotos = data.fotolar;
+  currentCustomerId = data.musteri_id;
+  document.getElementById('result-title-text').textContent='Fotoğraflarınız 🎉';
+  document.getElementById('co-confirm').textContent='Siparişi Onayla ✓';
+  document.getElementById('co-email').value='';
+  document.getElementById('result-sub-text').textContent = data.fotolar.length+' fotoğraf • büyütmek için dokun, ✓ ile sepete ekle';
+  const g=document.getElementById('gallery'); g.innerHTML='';
+  data.fotolar.forEach((p,idx)=>{
+    const d=document.createElement('div'); d.className='thumb'; d.id='thumb-'+p.id; d.dataset.id=p.id;
+    d.innerHTML=`<img loading="lazy" src="${p.url}" alt="foto"><div class="tick">✓</div><div class="zoom">🔍</div>`;
+    d.querySelector('img').onclick=()=>openLightbox(idx);
+    d.querySelector('.zoom').onclick=(e)=>{e.stopPropagation();openLightbox(idx);};
+    d.querySelector('.tick').onclick=(e)=>{e.stopPropagation();toggleSelect(p.id);};
+    g.appendChild(d);
+  });
+  renderAlbums();
+  renderCart();
+  loadPastOrders(currentCustomerId);
+  showScreen('screen-result');
+}
+
+/* ---- Tekrar gelen musteri: onceki siparisler ---- */
+async function loadPastOrders(customerId){
+  const box=document.getElementById('past-orders');
+  box.style.display='none'; box.innerHTML=''; pastOrders=[];
+  if(!customerId) return;
+  try{ pastOrders=await fetch('/orders?customer_id='+customerId).then(r=>r.json()); }catch(e){ return; }
+  // Yeni siparis: bilinen (en son) e-postayi otomatik doldur
+  if(!editingOrder && !document.getElementById('co-email').value && pastOrders.length && pastOrders[0].email){
+    document.getElementById('co-email').value = pastOrders[0].email;
+  }
+  renderPastOrders();
+}
+
+// Onceki siparisler barini cizer (duzenlenen siparisi vurgular)
+function renderPastOrders(){
+  const box=document.getElementById('past-orders');
+  if(!pastOrders.length){ box.style.display='none'; box.innerHTML=''; return; }
+  const durum={yeni:['po-yeni','Hazırlanıyor'],hazir:['po-hazir','Hazır'],teslim:['po-teslim','Teslim edildi']};
+  let html=`<div class="po-head"><h3>🧾 Önceki Siparişleriniz (${pastOrders.length})</h3>
+    <button class="po-new" onclick="startNewOrder()">+ Yeni Sipariş</button></div>`;
+  pastOrders.forEach((o,idx)=>{
+    const dt=new Date(o.created_at).toLocaleDateString('tr-TR',{day:'numeric',month:'long'});
+    const d=durum[o.status]||['po-yeni',o.status];
+    // Teslim edilmemis her siparis duzenlenebilir; duzenleyince "yeni"ye geri duser.
+    const editable=o.status!=='teslim';
+    const editing = editingOrder && editingOrder.id===o.id;
+    const fiyat = o.toplam_fiyat!=null ? ' • '+tl(o.toplam_fiyat) : '';
+    const altYazi = editing
+      ? '<b style="color:var(--brand-2)">✏️ şu an düzenleniyor</b>'
+      : (editable ? '✏️ düzenlemek için dokunun' : '');
+    html+=`<div class="po-item ${editing?'editing':''}" ${editable?`onclick="editOrder(${idx})" style="cursor:pointer"`:''}>
+      <div class="po-left">
+        <b>${editing?'✏️ ':''}Sipariş #${o.id} — ${escapeHtml(o.product_name||'—')}${fiyat}</b>
+        <div>${dt} • ${o.foto_sayisi} fotoğraf${altYazi?' • '+altYazi:''}</div>
+      </div>
+      <span class="po-status ${editing?'po-hazir':d[0]}">${editing?'Düzenleniyor':d[1]}</span>
+    </div>`;
+  });
+  box.innerHTML=html;
+  box.style.display='block';
+}
+
+// Duzenlemeyi birak, temiz yeni siparise don (bastan baslamadan)
+function startNewOrder(){
+  editingOrder=null;
+  selected.clear(); notes={};
+  document.querySelectorAll('.thumb').forEach(el=>el.classList.remove('selected'));
+  document.getElementById('result-title-text').textContent='Fotoğraflarınız 🎉';
+  document.getElementById('co-confirm').textContent='Siparişi Onayla ✓';
+  document.getElementById('co-email').value = (pastOrders.length && pastOrders[0].email) ? pastOrders[0].email : '';
+  renderAlbums();
+  renderCart();
+  renderPastOrders();
+  window.scrollTo({top:0,behavior:'smooth'});
+  toast('Yeni sipariş — galeriden fotoğraf seçin.');
+}
+
+// Onceki siparisi duzenleme moduna gir (ayni ekranda: sepet dolar)
+function editOrder(idx){
+  const o=pastOrders[idx];
+  if(!o || o.status==='teslim'){ toast('Bu sipariş teslim edildiği için değiştirilemez.'); return; }
+  editingOrder=o;
+  selected.clear(); notes={};
+  o.items.forEach(it=>{ selected.add(it.photo_id); notes[it.photo_id]=it.note||''; });
+  document.querySelectorAll('.thumb').forEach(el=>{
+    el.classList.toggle('selected', selected.has(Number(el.dataset.id)));
+  });
+  document.getElementById('result-title-text').textContent=`Sipariş #${o.id} Düzenleniyor`;
+  document.getElementById('co-confirm').textContent='Güncelle ✓';
+  document.getElementById('co-email').value=o.email||'';
+  renderAlbums();   // onceki urunu secer
+  renderCart();
+  renderPastOrders();  // secili siparisi vurgula
+  window.scrollTo({top:0,behavior:'smooth'});
+  toast('Sipariş #'+o.id+' düzenleniyor — bitince Güncelle, vazgeçersen + Yeni Sipariş deyin.');
+}
+function showEmpty(emoji,title,text){
+  document.getElementById('empty-emoji').textContent=emoji;
+  document.getElementById('empty-title').textContent=title;
+  document.getElementById('empty-text').textContent=text;
+  showScreen('screen-empty');
+}
+function tl(n){ return Number(n).toLocaleString('tr-TR',{minimumFractionDigits:0,maximumFractionDigits:2})+' ₺'; }
+function escapeAttr(s){ return String(s).replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+/* ---- SOL: paket/albüm seçimi ---- */
+async function renderAlbums(){
+  selectedProduct=null;
+  const prods = await fetch('/products?sadece_aktif=true').then(r=>r.json()).catch(()=>[]);
+  const grid=document.getElementById('prod-grid'); grid.innerHTML='';
+  if(!prods.length){
+    grid.innerHTML='<div style="color:#6b8591;font-size:14px">Henüz paket tanımlanmamış. Görevliye danışın.</div>';
+    updateTotals(); return;
+  }
+  let ilkSerbest=null, ilkSerbestEl=null;
+  prods.forEach(p=>{
+    const free = p.photo_count==null;
+    const el=document.createElement('div'); el.className='prod'; el.dataset.id=p.id;
+    el.innerHTML=`
+      <div class="pn">${escapeHtml(p.name)}</div>
+      <div class="pd">${p.description?escapeHtml(p.description):''}</div>
+      <div class="pp">${tl(p.price)}${free?' <span style="font-size:12px;color:#6b8591">/ foto</span>':''}</div>
+      <span class="pc ${free?'free':''}">${free?'İstediğin kadar':(p.photo_count+' fotoğraf')}</span>`;
+    el.onclick=()=>selectProduct(p,el);
+    grid.appendChild(el);
+    if(free && !ilkSerbest){ ilkSerbest=p; ilkSerbestEl=el; }
+    if(editingOrder && editingOrder.product_id===p.id){ selectProduct(p,el); }
+  });
+  // Yeni siparis: serbest secimi varsayilan sec
+  if(!editingOrder && !selectedProduct && ilkSerbest){ selectProduct(ilkSerbest,ilkSerbestEl); }
+  updateTotals();
+}
+function selectProduct(p,el){
+  selectedProduct=p;
+  document.querySelectorAll('.prod').forEach(x=>x.classList.remove('sel'));
+  el.classList.add('sel');
+  updateTotals();
+}
+
+/* ---- SAG: sepet ---- */
+function toggleSelect(id){
+  if(selected.has(id)) selected.delete(id);
+  else selected.add(id);
+  const el=document.getElementById('thumb-'+id);
+  if(el) el.classList.toggle('selected',selected.has(id));
+  renderCart();
+  syncLightboxButton();
+}
+function renderCart(){
+  // Once mevcut input degerlerini notes'a al (yeniden cizimde kaybolmasin)
+  document.querySelectorAll('#cart-items input').forEach(inp=>{ notes[inp.dataset.photo]=inp.value; });
+  const box=document.getElementById('cart-items'); box.innerHTML='';
+  const secililer=currentPhotos.filter(p=>selected.has(p.id));
+  document.getElementById('cart-count').textContent=secililer.length;
+  if(!secililer.length){
+    box.innerHTML='<div class="cart-empty">Galeride ✓ simgesine dokunarak fotoğraf ekleyin.</div>';
+  }
+  secililer.forEach(p=>{
+    const row=document.createElement('div'); row.className='cart-row';
+    const val = notes[p.id] ? ` value="${escapeAttr(notes[p.id])}"` : '';
+    row.innerHTML=`<img src="${p.url}" alt="foto">
+      <input data-photo="${p.id}"${val} placeholder="Not (örn. photoshop)" oninput="notes[this.dataset.photo]=this.value" />
+      <button class="co-remove" title="Çıkar" onclick="toggleSelect(${p.id})">×</button>`;
+    box.appendChild(row);
+  });
+  updateTotals();
+}
+function updateTotals(){
+  const warn=document.getElementById('prod-warn');
+  const btn=document.getElementById('co-confirm');
+  const totalEl=document.getElementById('co-total-val');
+  const subEl=document.getElementById('co-total-sub');
+  const n=selected.size;
+  if(!selectedProduct){ totalEl.textContent='—'; subEl.textContent=''; warn.style.display='none'; btn.disabled=true; return; }
+  const serbest = selectedProduct.photo_count==null;
+  if(serbest){
+    totalEl.textContent=tl(selectedProduct.price*n);
+    subEl.textContent=`${tl(selectedProduct.price)} × ${n} fotoğraf`;
+    warn.style.display='none';
+    btn.disabled = n===0;
+  }else{
+    const cap=selectedProduct.photo_count;
+    totalEl.textContent=tl(selectedProduct.price);
+    subEl.textContent=`${cap} fotoğraflık paket`;
+    if(n===cap){ warn.style.display='none'; btn.disabled=false; }
+    else{
+      warn.textContent = n<cap
+        ? `Bu paket tam ${cap} fotoğraf gerektirir — ${n} seçtiniz, ${cap-n} tane daha ekleyin.`
+        : `Bu paket tam ${cap} fotoğraf içerir — ${n} seçtiniz, ${n-cap} fazla, çıkarın.`;
+      warn.style.display='block'; btn.disabled=true;
+    }
+  }
+}
+
+async function confirmOrder(){
+  if(!selectedProduct){ toast('Lütfen bir paket seçin.'); return; }
+  if(selected.size===0){ toast('Lütfen en az bir fotoğraf seçin.'); return; }
+  const email=document.getElementById('co-email').value.trim();
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){
+    toast('Lütfen geçerli bir e-posta girin.');
+    document.getElementById('co-email').focus();
+    return;
+  }
+  // Notlari inputlardan topla
+  document.querySelectorAll('#cart-items input').forEach(inp=>{ notes[inp.dataset.photo]=inp.value; });
+  const items=[...selected].map(id=>({ photo_id:id, note:(notes[id]||'').trim()||null }));
+  const btn=document.getElementById('co-confirm');
+  const eskiEtiket=btn.textContent;
+  btn.disabled=true; btn.textContent='Gönderiliyor…';
+  // Duzenleme -> PATCH /orders/{id}; yeni -> POST /orders
+  const url = editingOrder ? '/orders/'+editingOrder.id : '/orders';
+  const method = editingOrder ? 'PATCH' : 'POST';
+  const body = editingOrder
+    ? { product_id:selectedProduct.id, email, items }
+    : { customer_id:currentCustomerId, product_id:selectedProduct.id, email, items };
+  try{
+    const res=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(res.ok){
+      const o=await res.json();
+      const guncelleme = !!editingOrder;
+      editingOrder=null;
+      document.querySelector('#screen-success h1').textContent = guncelleme ? 'Siparişiniz Güncellendi!' : 'Siparişiniz Alındı!';
+      const fiyat = o.toplam_fiyat!=null ? ' • '+tl(o.toplam_fiyat) : '';
+      document.getElementById('success-text').textContent=
+        `Sipariş No: #${o.id} — ${o.foto_sayisi} fotoğraf${fiyat}. Çıktılarınızı kasadan teslim alabilirsiniz.`;
+      showScreen('screen-success');
+    }else{
+      const err=await res.json().catch(()=>({}));
+      toast(err.detail||'İşlem başarısız.'); btn.disabled=false; btn.textContent=eskiEtiket;
+    }
+  }catch(e){
+    toast('Sunucuya ulaşılamadı.'); btn.disabled=false; btn.textContent=eskiEtiket;
+  }
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function restart(){
+  selected.clear(); notes={}; editingOrder=null; closeLightbox();
+  goWelcome();
+}
+
+/* ---- Lightbox (buyutme / inceleme) ---- */
+function openLightbox(idx){
+  lbIndex=idx;
+  showLightboxImage();
+  document.getElementById('lightbox').classList.add('show');
+}
+function showLightboxImage(){
+  const p=currentPhotos[lbIndex];
+  const img=document.getElementById('lb-img');
+  const loading=document.getElementById('lb-loading');
+  loading.style.display='block'; img.style.visibility='hidden';
+  img.onload=()=>{ loading.style.display='none'; img.style.visibility='visible'; };
+  // Tam boyut (yine filigranli)
+  img.src = p.url + '&boyut=tam';
+  document.getElementById('lb-counter').textContent = (lbIndex+1)+' / '+currentPhotos.length;
+  syncLightboxButton();
+}
+function lbNav(dir){
+  lbIndex = (lbIndex + dir + currentPhotos.length) % currentPhotos.length;
+  showLightboxImage();
+}
+function lbToggleSelect(){
+  toggleSelect(currentPhotos[lbIndex].id);
+}
+function syncLightboxButton(){
+  const btn=document.getElementById('lb-select');
+  if(!currentPhotos.length) return;
+  const id=currentPhotos[lbIndex]?.id;
+  const on=selected.has(id);
+  btn.textContent = on ? '✓ Seçildi' : 'Seç';
+  btn.classList.toggle('on',on);
+}
+function closeLightbox(){ document.getElementById('lightbox').classList.remove('show'); }
+
+// Klavye ile gezinme (test kolayligi + erisilebilirlik)
+document.addEventListener('keydown',(e)=>{
+  if(!document.getElementById('lightbox').classList.contains('show')) return;
+  if(e.key==='ArrowLeft') lbNav(-1);
+  else if(e.key==='ArrowRight') lbNav(1);
+  else if(e.key==='Escape') closeLightbox();
+});
+</script>
+</body>
+</html>

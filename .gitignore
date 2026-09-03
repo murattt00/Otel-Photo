@@ -1,0 +1,27 @@
+# --- Python ---
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# --- Ortam degiskenleri / sirlar ---
+.env
+backend/.env
+
+# --- Veri (fotograflar, kullanici verisi -- repoya girmemeli) ---
+data/raw_uploads/*
+data/customer_folders/*
+data/debug_output/*
+data/cache/*
+data/edited/*
+data/siparisler_export/*
+!data/raw_uploads/.gitkeep
+!data/customer_folders/.gitkeep
+!data/debug_output/.gitkeep
+
+# --- InsightFace model onbellegi ---
+~/.insightface/
+
+# --- IDE ---
+.vscode/
+.idea/

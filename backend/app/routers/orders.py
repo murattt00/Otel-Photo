@@ -1,0 +1,293 @@
+"""
+Siparis (sepet) endpointleri.
+
+- POST   /orders            -> kioskta musteri sepeti onaylayinca cagrilir; siparis olusur (status=yeni)
+- GET    /orders            -> operator gelen siparisleri gorur (status filtresi opsiyonel)
+- GET    /orders/{id}       -> siparis detayi (fotolar + notlar)
+- PATCH  /orders/{id}/status-> operator durumu gunceller (yeni -> hazir -> teslim)
+
+Onemli: satilan her foto, cekildigi fotografciya (Photo.uploaded_by_id) baglidir; bu sayede
+"fotografci basina satis" raporu OrderItem -> Photo -> Photographer zinciriyle cikarilabilir.
+"""
+import os
+import shutil
+import zipfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app import models, schemas
+from app.config import settings
+from app.database import get_db
+from app.services.order_export import export_order, order_folder
+
+router = APIRouter(prefix="/orders", tags=["siparisler"])
+
+GECERLI_DURUMLAR = {"yeni", "hazir", "teslim"}
+
+
+def _validate_product_and_photos(db: Session, product_id: int | None, items) -> None:
+    """Urun (varsa) + kapasite + fotograflarin varligini dogrular; hatada HTTPException atar."""
+    if not items:
+        raise HTTPException(status_code=400, detail="Sepette en az bir fotograf olmali.")
+
+    if product_id is not None:
+        product = db.get(models.Product, product_id)
+        if product is None:
+            raise HTTPException(status_code=404, detail="Secilen urun bulunamadi.")
+        # Sabit albuw: TAM olarak photo_count kadar foto olmali (ne az ne fazla).
+        # Serbest urun (photo_count=None): sinir yok.
+        if product.photo_count is not None and len(items) != product.photo_count:
+            raise HTTPException(
+                status_code=400,
+                detail=f"'{product.name}' tam {product.photo_count} foto icermeli; "
+                f"{len(items)} foto secildi.",
+            )
+
+    photo_ids = [it.photo_id for it in items]
+    bulunan = db.query(models.Photo.id).filter(models.Photo.id.in_(photo_ids)).count()
+    if bulunan != len(set(photo_ids)):
+        raise HTTPException(status_code=400, detail="Bazi fotograflar bulunamadi.")
+
+
+def _order_total(order: models.Order) -> float | None:
+    """Siparis toplam fiyati. Serbest urun (photo_count=None) -> foto basi fiyat x foto sayisi;
+    sabit albuw -> urunun sabit fiyati."""
+    if order.product is None:
+        return None
+    if order.product.photo_count is None:  # serbest / foto basi
+        return round(order.product.price * len(order.items), 2)
+    return order.product.price
+
+
+def _serialize(order: models.Order) -> schemas.OrderOut:
+    """Order ORM nesnesini, operatorun ihtiyac duydugu turetilmis alanlarla birlikte cikartir."""
+    return schemas.OrderOut(
+        id=order.id,
+        customer_id=order.customer_id,
+        customer_folder=order.customer.folder_code if order.customer else None,
+        product_id=order.product_id,
+        product_name=order.product.name if order.product else None,
+        email=order.email,
+        status=order.status,
+        note=order.note,
+        created_at=order.created_at,
+        revised=order.revised_at is not None,
+        foto_sayisi=len(order.items),
+        toplam_fiyat=_order_total(order),
+        items=[
+            schemas.OrderItemOut(
+                id=it.id, photo_id=it.photo_id, note=it.note, edited=bool(it.edited_path)
+            )
+            for it in sorted(order.items, key=lambda x: x.id)
+        ],
+    )
+
+
+@router.post("", response_model=schemas.OrderOut, status_code=201)
+def create_order(
+    data: schemas.OrderCreate,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Sepeti siparise cevirir (kiosk onayi). Siparis, editorun calismasi icin arka planda
+    'siparis_XXXX' klasoru olarak da yazilir."""
+    customer = db.get(models.Customer, data.customer_id)
+    if customer is None:
+        raise HTTPException(status_code=404, detail="Musteri bulunamadi.")
+
+    _validate_product_and_photos(db, data.product_id, data.items)
+
+    order = models.Order(
+        customer_id=data.customer_id,
+        product_id=data.product_id,
+        email=data.email,
+        note=data.note,
+        status="yeni",
+        items=[models.OrderItem(photo_id=it.photo_id, note=it.note) for it in data.items],
+    )
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+    background.add_task(export_order, order.id)  # siparis klasorunu arka planda olustur
+    return _serialize(order)
+
+
+@router.get("", response_model=list[schemas.OrderOut])
+def list_orders(
+    status: str | None = None,
+    customer_id: int | None = None,
+    email: str | None = None,
+    limit: int | None = None,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+):
+    """Siparisleri listeler (en yeni ustte). limit/offset ile sayfalama (operator icin)."""
+    query = db.query(models.Order)
+    if status:
+        query = query.filter(models.Order.status == status)
+    if customer_id is not None:
+        query = query.filter(models.Order.customer_id == customer_id)
+    if email:
+        query = query.filter(models.Order.email == email)
+    # Yeni sekmesinde: once duzenlenmis (revised) olanlar dikkat ceksin, sonra en yeni
+    query = query.order_by(models.Order.created_at.desc())
+    if offset:
+        query = query.offset(offset)
+    if limit is not None:
+        query = query.limit(limit)
+    return [_serialize(o) for o in query.all()]
+
+
+@router.get("/sayilar")
+def order_counts(db: Session = Depends(get_db)):
+    """Sekme rozetleri + sayfalama icin durum bazli siparis sayilari."""
+    rows = db.query(models.Order.status, func.count()).group_by(models.Order.status).all()
+    sayim = {s: n for s, n in rows}
+    return {
+        "yeni": sayim.get("yeni", 0),
+        "hazir": sayim.get("hazir", 0),
+        "toplam": sum(sayim.values()),
+    }
+
+
+@router.get("/{order_id}", response_model=schemas.OrderOut)
+def get_order(order_id: int, db: Session = Depends(get_db)):
+    """Tek bir siparisin detayi."""
+    order = db.get(models.Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Siparis bulunamadi.")
+    return _serialize(order)
+
+
+@router.patch("/{order_id}", response_model=schemas.OrderOut)
+def update_order(
+    order_id: int,
+    data: schemas.OrderUpdate,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Mevcut bir siparisi (sepeti) gunceller. Sadece 'yeni' durumdakiler duzenlenebilir;
+    operator 'hazir'/'teslim' yaptiysa degistirilemez (409)."""
+    order = db.get(models.Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Siparis bulunamadi.")
+
+    _validate_product_and_photos(db, data.product_id, data.items)
+
+    order.product_id = data.product_id
+    order.email = data.email
+    order.note = data.note
+    # Eski kalemleri sil, yenilerini ekle (cascade delete-orphan)
+    for it in list(order.items):
+        db.delete(it)
+    db.flush()
+    for it in data.items:
+        order.items.append(models.OrderItem(photo_id=it.photo_id, note=it.note))
+
+    # Musteri duzenledi -> siparis "yeni" sekmesine geri duser + "duzenlendi" isaretlenir.
+    # (Operator hazir yapmis olsa bile tekrar bakmasi gerekir.)
+    order.status = "yeni"
+    order.revised_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(order)
+    background.add_task(export_order, order.id)  # klasoru guncelle (eksik fotolari ekler)
+    return _serialize(order)
+
+
+@router.patch("/{order_id}/status", response_model=schemas.OrderOut)
+def update_status(order_id: int, data: schemas.OrderStatusUpdate, db: Session = Depends(get_db)):
+    """Operator siparis durumunu gunceller."""
+    if data.status not in GECERLI_DURUMLAR:
+        raise HTTPException(
+            status_code=400, detail=f"Gecersiz durum. Gecerli: {', '.join(GECERLI_DURUMLAR)}"
+        )
+    order = db.get(models.Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Siparis bulunamadi.")
+    order.status = data.status
+    db.commit()
+    db.refresh(order)
+    return _serialize(order)
+
+
+# ---- Photoshop / duzenlenmis versiyon + teslim paketi ----
+
+@router.post("/{order_id}/items/{item_id}/edited", response_model=schemas.OrderOut)
+def upload_edited(
+    order_id: int,
+    item_id: int,
+    file: UploadFile = File(..., description="Photoshop'lu (duzenlenmis) foto"),
+    db: Session = Depends(get_db),
+):
+    """Operator, bir siparis fotosunun photoshop'lu halini yukler. Orijinal DEGISMEZ;
+    duzenlenmis versiyon order item'a baglanir. Teslimatta oncelik edited'de."""
+    item = db.get(models.OrderItem, item_id)
+    if item is None or item.order_id != order_id:
+        raise HTTPException(status_code=404, detail="Siparis kalemi bulunamadi.")
+
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in settings.ALLOWED_IMAGE_EXTS:
+        raise HTTPException(status_code=400, detail="Sadece jpg/jpeg/png yuklenebilir.")
+
+    settings.EDITED_DIR.mkdir(parents=True, exist_ok=True)
+    dst = settings.EDITED_DIR / f"item{item_id}{ext}"
+    with open(dst, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    item.edited_path = str(dst)
+    db.commit()
+
+    order = db.get(models.Order, order_id)
+    return _serialize(order)
+
+
+@router.get("/items/{item_id}/edited-image")
+def edited_image(item_id: int, db: Session = Depends(get_db)):
+    """Bir siparis kaleminin duzenlenmis (photoshop'lu) gorselini dondurur."""
+    item = db.get(models.OrderItem, item_id)
+    if item is None or not item.edited_path or not os.path.exists(item.edited_path):
+        raise HTTPException(status_code=404, detail="Duzenlenmis versiyon yok.")
+    return FileResponse(item.edited_path, media_type="image/jpeg")
+
+
+@router.post("/{order_id}/export")
+def export_order_folder(order_id: int, db: Session = Depends(get_db)):
+    """Siparisin 'siparis_XXXX' klasorunu (yeniden) olusturur. Editorun makinesine paylasilan
+    ORDERS_EXPORT_DIR altina yazar. Var olan (duzenlenmis) dosyalari ezmez."""
+    order = db.get(models.Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Siparis bulunamadi.")
+    path = export_order(order_id)
+    return {"klasor": path, "mesaj": "Siparis klasoru olusturuldu/guncellendi."}
+
+
+@router.get("/{order_id}/download")
+def download_package(order_id: int, db: Session = Depends(get_db)):
+    """Siparisin TESLIM PAKETINI (zip) dondurur: her foto icin duzenlenmis varsa o, yoksa
+    orijinal full-res. Operator bunu indirip WeTransfer'e atabilir / musteriye verebilir."""
+    order = db.get(models.Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Siparis bulunamadi.")
+
+    settings.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    zip_path = settings.CACHE_DIR / f"siparis_{order_id}_teslim.zip"
+
+    # JPEG zaten sikisik -> ZIP_STORED (sikistirmasiz, hizli)
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_STORED) as z:
+        for i, it in enumerate(sorted(order.items, key=lambda x: x.id), 1):
+            edited = bool(it.edited_path and os.path.exists(it.edited_path))
+            src = it.edited_path if edited else (it.photo.stored_path if it.photo else None)
+            if not src or not os.path.exists(src):
+                continue
+            ext = Path(src).suffix or ".jpg"
+            arcname = f"{i:02d}_foto{it.photo_id}{'_duzenli' if edited else ''}{ext}"
+            z.write(src, arcname)
+
+    return FileResponse(
+        zip_path, media_type="application/zip", filename=f"siparis_{order_id}_teslim.zip"
+    )

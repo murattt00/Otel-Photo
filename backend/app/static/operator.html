@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Operatör Paneli</title>
+<style>
+  :root{
+    --brand:#12b5b0; --brand-2:#ff7a59; --accent:#ff7a59;
+    --ink:#16323a; --muted:#6b8591; --line:#e6edf1; --bg:#eef2f5; --white:#fff;
+    --radius:16px; --shadow:0 1px 2px rgba(23,48,57,.06),0 6px 18px rgba(23,48,57,.07);
+    --shadow-h:0 12px 30px rgba(23,48,57,.14);
+    --font:'Segoe UI',system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:var(--font);color:var(--ink);background:var(--bg);line-height:1.5;}
+  .app{display:flex;min-height:100vh;}
+  /* Kenar menu */
+  .sidebar{width:248px;flex-shrink:0;background:#12303a;color:#bdd6d4;display:flex;flex-direction:column;padding:20px 14px;position:sticky;top:0;height:100vh;}
+  .brand{display:flex;align-items:center;gap:12px;font-size:22px;padding:6px 10px 0;margin-bottom:26px;}
+  .brand .bt{display:flex;flex-direction:column;line-height:1.15;}
+  .brand .bt b{font-size:17px;font-weight:800;color:#fff;}
+  .brand .bt span{font-size:10px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:1.5px;}
+  .nav{display:flex;flex-direction:column;gap:4px;}
+  .nav-item{background:transparent;border:none;color:#9fbfbd;font-family:var(--font);font-size:15px;font-weight:700;text-align:left;padding:13px 15px;border-radius:11px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:.15s;}
+  .nav-item .ni-ic{font-size:18px;}
+  .nav-item:hover{background:rgba(255,255,255,.07);color:#fff;}
+  .nav-item.active{background:var(--brand);color:#fff;box-shadow:0 8px 20px rgba(18,181,176,.35);}
+  .nav-badge{margin-left:auto;background:var(--brand-2);color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;}
+  .nav-item.active .nav-badge{background:rgba(255,255,255,.28);}
+  .side-foot{margin-top:auto;font-size:11px;color:#6a8b89;padding:12px 12px 4px;border-top:1px solid rgba(255,255,255,.08);}
+  /* Ana alan */
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;}
+  .page-head{background:#fff;border-bottom:1px solid var(--line);padding:20px clamp(18px,3vw,34px);position:sticky;top:0;z-index:20;}
+  .page-head h1{font-size:23px;font-weight:800;color:var(--ink);}
+  .page-head p{font-size:14px;color:var(--muted);margin-top:2px;}
+  .content{padding:26px clamp(18px,3vw,34px);flex:1;}
+  #tab-products{max-width:1500px;}
+  #tab-upload{max-width:900px;}
+  /* Urunler: solda form (sticky), sagda liste */
+  .products-layout{display:grid;grid-template-columns:360px 1fr;gap:22px;align-items:start;}
+  @media(max-width:920px){.products-layout{grid-template-columns:1fr;}}
+  .prod-form{position:sticky;top:22px;margin-bottom:0;}
+  @media(max-width:920px){.prod-form{position:static;}}
+  .prod-form .form-grid{grid-template-columns:1fr;}
+  /* Urun kartlari */
+  .prod-grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;}
+  .prod-card2{border:1px solid var(--line);border-radius:14px;padding:16px;background:#fff;transition:.15s;display:flex;flex-direction:column;}
+  .prod-card2:hover{box-shadow:var(--shadow-h);transform:translateY(-2px);}
+  .pc2-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+  .pc2-name{font-weight:800;font-size:16px;color:var(--ink);}
+  .pc2-desc{font-size:13px;color:var(--muted);margin-top:3px;}
+  .pc2-mid{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:14px 0;padding:13px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
+  .pc2-price{font-size:22px;font-weight:800;color:var(--brand);white-space:nowrap;}
+  .pc2-price span{font-size:12px;font-weight:600;color:var(--muted);}
+  .pc2-actions{display:flex;gap:8px;margin-top:auto;}
+  .pc2-actions button{flex:1;padding:9px;}
+  /* Yukleme yontem kartlari */
+  .methods{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px;}
+  @media(max-width:760px){.methods{grid-template-columns:1fr;}}
+  .method-box{border:1px solid var(--line);border-radius:14px;padding:18px;background:#fbfdfd;}
+  .method-title{font-weight:800;font-size:15px;margin-bottom:6px;color:var(--ink);}
+  .method-desc{font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.45;}
+  /* Panel / kart */
+  .panel{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:24px;margin-bottom:22px;}
+  .panel h2{font-size:17px;font-weight:800;margin-bottom:18px;display:flex;align-items:center;gap:8px;justify-content:space-between;}
+  tbody tr:hover{background:#f6fafb;}
+  @media(max-width:820px){
+    .app{flex-direction:column;}
+    .sidebar{width:100%;height:auto;position:static;flex-direction:row;align-items:center;gap:6px;padding:10px;overflow-x:auto;}
+    .brand{margin:0 10px 0 4px;}.brand .bt span{display:none;}
+    .nav{flex-direction:row;}.side-foot{display:none;}
+    .nav-item{padding:10px 14px;white-space:nowrap;}
+  }
+
+  .form-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;}
+  @media(max-width:640px){.form-grid{grid-template-columns:1fr;}}
+  label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px;}
+  input,textarea,select{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:11px 13px;font-size:15px;font-family:var(--font);color:var(--ink);background:#fff;}
+  input:focus,textarea:focus,select:focus{outline:none;border-color:var(--brand);}
+  input[type=file]{padding:9px;}
+  .pg-chip{display:inline-flex;align-items:center;gap:6px;background:#eef5f6;color:var(--ink);padding:6px 14px;border-radius:999px;font-size:14px;font-weight:600;margin:4px 6px 0 0;}
+  .up-result{margin-top:14px;padding:14px;border-radius:12px;background:#e7f7ec;color:#1a6e3a;font-weight:600;display:none;}
+  .subhead{font-size:15px;font-weight:800;margin:22px 0 8px;color:var(--ink);border-top:1px solid var(--line);padding-top:18px;}
+  .subhead:first-of-type{border-top:none;padding-top:0;}
+  .progress{height:14px;border-radius:999px;background:#e5edf0;overflow:hidden;margin-top:12px;display:none;}
+  .progress .bar{height:100%;width:0;background:linear-gradient(90deg,var(--brand),var(--brand-2));transition:width .2s;}
+  .progress-label{font-size:13px;color:var(--muted);margin-top:6px;display:none;}
+  .proc-box{margin-top:8px;padding:14px;border-radius:12px;background:#eef5f6;font-weight:600;color:var(--brand);display:none;}
+  .proc-box .err{color:#e5503a;}
+  .hint{font-size:12px;color:var(--muted);margin-top:4px;}
+  .form-actions{margin-top:16px;display:flex;gap:10px;align-items:center;}
+
+  .btn{border:none;cursor:pointer;font-family:var(--font);font-weight:700;border-radius:10px;padding:11px 22px;font-size:15px;transition:.15s;}
+  .btn:active{transform:scale(.97);}
+  .btn-primary{background:var(--accent);color:#fff;box-shadow:0 6px 16px rgba(255,122,89,.32);}
+  .btn-primary:hover{filter:brightness(1.04);box-shadow:0 9px 22px rgba(255,122,89,.4);transform:translateY(-1px);}
+  .btn-primary:active{transform:translateY(0);}
+  .btn-ghost{background:transparent;color:var(--muted);}
+  .btn-mini{padding:7px 14px;font-size:13px;border-radius:8px;}
+  .btn-edit{background:#eef5f6;color:var(--brand);}
+  .btn-del{background:#fdecea;color:#e5503a;}
+  .btn-ok{background:#e7f7ec;color:#1a9e4b;}
+  .btn-blue{background:#e8f1fb;color:#2b6cb0;}
+
+  table{width:100%;border-collapse:collapse;}
+  th,td{text-align:left;padding:13px 12px;border-bottom:1px solid var(--line);font-size:15px;vertical-align:middle;}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);}
+  td.price{font-weight:700;white-space:nowrap;}
+  .pill{display:inline-block;padding:3px 11px;border-radius:999px;font-size:12px;font-weight:700;}
+  .pill-count{background:#e8f6f5;color:var(--brand);}
+  .pill-free{background:#fff2ec;color:var(--brand-2);}
+  .pill-on{background:#e7f7ec;color:#1a9e4b;}
+  .pill-off{background:#f0f0f0;color:#8a8a8a;}
+  .row-actions{display:flex;gap:8px;justify-content:flex-end;}
+  .empty{text-align:center;color:var(--muted);padding:36px 0;}
+
+  /* Siparis kartlari */
+  .order{border:1.5px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px;}
+  .order-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;}
+  .order-id{font-weight:800;font-size:17px;}
+  .order-meta{font-size:13px;color:var(--muted);}
+  .status-yeni{background:#fff3e0;color:#d97706;}
+  .status-hazir{background:#e8f1fb;color:#2b6cb0;}
+  .status-teslim{background:#e7f7ec;color:#1a9e4b;}
+  .order-photos{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0;}
+  .op{width:96px;}
+  .op a{display:block;}
+  .op img{width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid var(--line);}
+  .op .note{font-size:12px;color:var(--ink);margin-top:4px;background:#fff8e6;border-radius:6px;padding:4px 7px;line-height:1.35;}
+  .op .note-empty{background:transparent;color:#9aa;font-style:italic;}
+  .op-fname{font-size:11px;color:var(--muted);font-weight:700;margin-top:4px;font-family:ui-monospace,Consolas,monospace;}
+  .op-badge{display:inline-block;font-size:11px;font-weight:700;background:#e7f7ec;color:#1a9e4b;border-radius:6px;padding:2px 6px;margin-top:4px;}
+  .op-btns{display:flex;gap:4px;margin-top:4px;}
+  .op-btns .mini{flex:1;text-align:center;font-size:11px;font-weight:700;padding:5px 4px;border-radius:6px;cursor:pointer;border:none;font-family:var(--font);text-decoration:none;display:inline-block;}
+  .op-dl{background:#eef5f6;color:var(--brand);}
+  .op-up{background:#fff2ec;color:var(--brand-2);}
+  .order-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .btn-zip{background:var(--brand);color:#fff;font-weight:800;}
+  /* Siparis alt-sekmeleri + sayfalama */
+  .orders-subtabs{display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap;}
+  .subtab{background:#fff;color:var(--muted);border:2px solid var(--line);border-radius:12px;padding:11px 22px;font-weight:800;font-size:16px;cursor:pointer;font-family:var(--font);display:inline-flex;align-items:center;gap:10px;transition:.15s;}
+  .subtab:hover{border-color:var(--brand);color:var(--brand);}
+  .subtab.active{background:var(--brand);color:#fff;border-color:var(--brand);box-shadow:0 8px 20px rgba(18,181,176,.35);}
+  .subtab .cnt{background:#eef1f2;color:var(--ink);border-radius:999px;padding:2px 11px;font-size:14px;font-weight:800;min-width:26px;text-align:center;}
+  .subtab:hover .cnt{background:#e0f1f0;color:var(--brand);}
+  .subtab.active .cnt{background:rgba(255,255,255,.28);color:#fff;}
+  .pager{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:16px;font-weight:700;color:var(--muted);}
+  .pager button[disabled]{opacity:.4;cursor:not-allowed;}
+  /* Siparis kartlari (grid) */
+  .orders-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;}
+  .orders-grid .empty{grid-column:1/-1;}
+  .order-card{background:#fff;border:1px solid var(--line);border-top:4px solid var(--brand);border-radius:16px;cursor:pointer;transition:.15s;overflow:hidden;}
+  .order-card.revised{border-top-color:var(--brand-2);}
+  .order-card:hover{box-shadow:0 12px 28px rgba(23,48,57,.15);transform:translateY(-3px);}
+  .oc-in{padding:16px 18px 18px;}
+  .oc-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .oc-id{font-weight:800;font-size:19px;color:var(--ink);}
+  .rev-badge{background:#fdecea;color:#e5503a;font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;white-space:nowrap;}
+  .oc-date{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#5b7480;font-weight:700;margin-top:8px;background:var(--bg);padding:5px 11px;border-radius:8px;}
+  .oc-div{height:1px;background:var(--line);margin:13px 0 11px;}
+  .oc-row{display:flex;align-items:center;gap:8px;font-size:14px;margin-top:8px;color:var(--ink);}
+  .oc-prod-row{justify-content:space-between;font-weight:700;}
+  .oc-price{font-weight:800;color:var(--brand);white-space:nowrap;}
+  .oc-email{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+  .oc-folder{font-size:12px;color:var(--muted);font-family:ui-monospace,Consolas,monospace;margin-top:11px;}
+  /* Detay modal */
+  .modal{position:fixed;inset:0;background:rgba(23,48,57,.55);display:none;align-items:flex-start;justify-content:center;z-index:100;padding:24px;overflow-y:auto;}
+  .modal.show{display:flex;}
+  .modal-card{background:#fff;border-radius:18px;width:min(900px,96vw);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto;}
+  .modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;}
+  .modal-head h2{font-size:22px;font-weight:800;}
+  .modal-sub{font-size:13px;color:var(--muted);margin-top:4px;}
+  .modal-close{background:#eef5f6;border:none;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;color:var(--muted);flex-shrink:0;}
+  .modal-info{background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:18px;display:flex;flex-direction:column;gap:10px;font-size:15px;}
+  .modal-info .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .modal-info .lbl{color:var(--muted);font-size:13px;font-weight:700;min-width:78px;}
+  .modal-info .copy{display:inline-flex;align-items:center;gap:6px;background:#e8f6f5;color:var(--brand);border:1.5px solid #bfe7e4;border-radius:999px;padding:7px 16px;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--font);transition:.15s;}
+  .modal-info .copy:hover{background:var(--brand);color:#fff;border-color:var(--brand);}
+  .modal-info .copy:active{transform:scale(.95);}
+  .modal-info .copy.copied{background:#e7f7ec;color:#1a9e4b;border-color:#bfe7c9;}
+  /* Duzenleme ozeti */
+  .edit-summary{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:700;margin-bottom:14px;padding:10px 14px;border-radius:10px;background:#fff1ea;color:#8a3d24;}
+  .edit-summary.none{background:#eef7f0;color:#1a7a44;}
+  .edit-summary b{font-size:17px;}
+  /* Fotograf kartlari */
+  .modal-photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:22px;}
+  .mp{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;display:flex;flex-direction:column;}
+  .mp.has-edit{border-color:var(--brand-2);box-shadow:0 0 0 1px var(--brand-2);}
+  .mp img{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#f0f0f0;}
+  .mp-body{padding:8px 10px 10px;display:flex;flex-direction:column;gap:6px;}
+  .mp-fname{font-size:11px;color:var(--muted);font-weight:700;font-family:ui-monospace,Consolas,monospace;}
+  .mp-edit{font-size:13px;border-radius:8px;padding:7px 9px;line-height:1.4;}
+  .mp-edit.has{background:#fff1ea;border-left:4px solid var(--brand-2);color:#7a3319;font-weight:600;}
+  .mp-edit.has .lbl{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--brand-2);font-weight:800;margin-bottom:3px;}
+  .mp-edit.none{background:#f2f6f7;color:#9aa;font-style:italic;text-align:center;font-size:12px;}
+  /* Aksiyon butonlari (belirgin) */
+  .modal-actions{display:flex;gap:12px;justify-content:flex-end;border-top:1px solid var(--line);padding-top:18px;}
+  .btn-ready{background:#1a9e4b;color:#fff;font-weight:800;font-size:16px;padding:14px 32px;border:none;border-radius:12px;cursor:pointer;box-shadow:0 8px 20px rgba(26,158,75,.32);}
+  .btn-ready:active{transform:scale(.97);}
+  .btn-unready{background:#fff;color:var(--brand);border:2px solid var(--brand);font-weight:800;font-size:16px;padding:13px 30px;border-radius:12px;cursor:pointer;}
+  .btn-unready:active{transform:scale(.97);}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--ink);color:#fff;padding:13px 22px;border-radius:999px;font-weight:600;
+    opacity:0;transition:.3s;pointer-events:none;z-index:50;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">🗂️<div class="bt"><b>Otel Foto</b><span>Operatör Paneli</span></div></div>
+    <nav class="nav">
+      <button class="nav-item active" id="tab-btn-orders" onclick="showTab('orders')"><span class="ni-ic">🛎️</span> Siparişler <span class="nav-badge" id="nav-cnt" style="display:none">0</span></button>
+      <button class="nav-item" id="tab-btn-products" onclick="showTab('products')"><span class="ni-ic">🎁</span> Ürünler</button>
+      <button class="nav-item" id="tab-btn-upload" onclick="showTab('upload')"><span class="ni-ic">📤</span> Fotoğraf Yükle</button>
+    </nav>
+    <div class="side-foot">Otel Fotoğraf Sistemi</div>
+  </aside>
+  <main class="main">
+    <header class="page-head">
+      <h1 id="page-title">Siparişler</h1>
+      <p id="page-sub">Gelen siparişleri takip edin ve hazırlayın</p>
+    </header>
+    <div class="content">
+  <!-- ============ URUNLER SEKMESI ============ -->
+  <div id="tab-products" style="display:none">
+    <div class="products-layout">
+    <div class="panel prod-form">
+      <h2 id="form-title">➕ Yeni Ürün Ekle</h2>
+      <input type="hidden" id="edit-id" value="" />
+      <div class="form-grid">
+        <div><label>Ürün / Albüm Adı</label><input id="f-name" placeholder="Örn: 10'luk Albüm" /></div>
+        <div><label>Fiyat (₺)</label><input id="f-price" type="number" min="0" step="0.01" placeholder="500" /></div>
+        <div><label>Foto Sayısı</label><input id="f-count" type="number" min="1" placeholder="10" /><div class="hint">Boş = serbest seçim → fiyat <b>foto başına</b> sayılır (müşteride varsayılan)</div></div>
+      </div>
+      <div style="margin-top:14px"><label>Açıklama (opsiyonel)</label><textarea id="f-desc" rows="2" placeholder="Örn: Sert kapaklı albüm, 20x30 cm"></textarea></div>
+      <div style="margin-top:12px">
+        <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="f-active" checked style="width:auto" /> Aktif (kioskta görünsün)
+        </label>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="saveProduct()" id="save-btn">Kaydet</button>
+        <button class="btn btn-ghost" onclick="resetForm()" id="cancel-btn" style="display:none">İptal</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>📋 Mevcut Ürünler</h2>
+      <div id="prod-list-grid" class="prod-grid2"></div>
+      <div id="empty" class="empty">Henüz ürün eklenmedi. Soldaki formdan ilk ürününüzü ekleyin.</div>
+    </div>
+    </div><!-- /products-layout -->
+  </div>
+
+  <!-- ============ FOTOGRAF YUKLE SEKMESI ============ -->
+  <div id="tab-upload" style="display:none">
+    <div class="panel">
+      <h2>📸 Fotoğrafçılar</h2>
+      <div class="form-grid" style="grid-template-columns:2fr 2fr auto">
+        <div><label>Ad Soyad</label><input id="pg-name" placeholder="Ör: Ahmet Yılmaz" /></div>
+        <div><label>Kullanıcı adı</label><input id="pg-username" placeholder="ahmet" /></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn btn-primary" onclick="addPhotographer()">Ekle</button></div>
+      </div>
+      <div id="pg-list" style="margin-top:6px"></div>
+    </div>
+
+    <div class="panel">
+      <h2>📤 Yeni Fotoğraf Yükle</h2>
+      <div style="max-width:440px">
+        <label>Fotoğrafçı <span style="color:var(--brand-2)">*</span></label>
+        <select id="up-photographer"></select>
+        <div class="hint">Bu karttaki fotoların sahibi — satış ona sayılır.</div>
+      </div>
+
+      <div class="methods">
+        <div class="method-box">
+          <div class="method-title">💻 Yöntem 1 — Bilgisayardan seç</div>
+          <div class="method-desc">Küçük/orta partiler. Fotoğraflar 25'erli gruplar hâlinde yüklenir, ilerlemeyi aşağıda görürsünüz.</div>
+          <input id="up-files" type="file" accept="image/*" multiple />
+          <div class="form-actions"><button class="btn btn-primary" id="up-btn" onclick="uploadPhotos()">Yükle</button></div>
+          <div id="up-progress" class="progress"><div class="bar" id="up-bar"></div></div>
+          <div id="up-progress-label" class="progress-label"></div>
+        </div>
+        <div class="method-box">
+          <div class="method-title">🗄️ Yöntem 2 — Sunucudaki klasörden işle</div>
+          <div class="method-desc">Büyük partiler için hızlı. Kartı <b>sunucudaki</b> bir klasöre kopyalayıp yolunu yazın; dosyalar yerinde işlenir (GB'larca fotoyu tarayıcıdan geçirmeye gerek yok).</div>
+          <input id="up-folder" placeholder="Örn: C:\otel-fotolar\2026-07-08_ahmet" />
+          <div class="form-actions"><button class="btn btn-primary" id="ingest-btn" onclick="ingestFolder()">Klasörü İşle</button></div>
+        </div>
+      </div>
+      <div id="up-result" class="up-result"></div>
+      <div id="proc-box" class="proc-box"></div>
+    </div>
+  </div>
+
+  <!-- ============ SIPARISLER SEKMESI ============ -->
+  <div id="tab-orders">
+    <div class="panel">
+      <div class="orders-subtabs">
+        <button class="subtab active" id="sub-yeni" onclick="setOrderView('yeni')">🆕 Yeni Gelenler <span class="cnt" id="cnt-yeni">0</span></button>
+        <button class="subtab" id="sub-hazir" onclick="setOrderView('hazir')">✅ Hazır <span class="cnt" id="cnt-hazir">0</span></button>
+        <button class="btn btn-mini btn-blue" style="margin-left:auto" onclick="loadOrders()">↻ Yenile</button>
+      </div>
+      <div id="orders-list" class="orders-grid"><div class="empty">Yükleniyor…</div></div>
+      <div id="orders-pager" class="pager"></div>
+    </div>
+  </div>
+    </div><!-- /content -->
+  </main>
+</div><!-- /app -->
+
+<div id="toast" class="toast"></div>
+
+<!-- Siparis detay penceresi -->
+<div id="order-modal" class="modal" onclick="if(event.target===this)closeOrderModal()">
+  <div class="modal-card" id="order-modal-body"></div>
+</div>
+
+<script>
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2600);}
+function tl(n){return Number(n).toLocaleString('tr-TR',{minimumFractionDigits:0,maximumFractionDigits:2})+' ₺';}
+function escapeHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+const PAGE_META={
+  orders:['Siparişler','Gelen siparişleri takip edin ve hazırlayın'],
+  products:['Ürünler','Albüm ve paket türlerini yönetin'],
+  upload:['Fotoğraf Yükle','Fotoğrafçı seçip yeni fotoğrafları sisteme aktarın'],
+};
+function showTab(name){
+  ['products','orders','upload'].forEach(t=>{
+    document.getElementById('tab-'+t).style.display = (t===name)?'block':'none';
+    document.getElementById('tab-btn-'+t).classList.toggle('active',t===name);
+  });
+  const m=PAGE_META[name]||['',''];
+  document.getElementById('page-title').textContent=m[0];
+  document.getElementById('page-sub').textContent=m[1];
+  if(name==='orders') loadOrders();
+  if(name==='products') loadProducts();
+  if(name==='upload') loadPhotographers();
+}
+
+/* ---------------- FOTOGRAFCILAR + YUKLEME ---------------- */
+async function loadPhotographers(){
+  const items=await fetch('/photographers').then(r=>r.json()).catch(()=>[]);
+  // Liste (chip)
+  const list=document.getElementById('pg-list');
+  list.innerHTML = items.length
+    ? items.map(p=>`<span class="pg-chip">📸 ${escapeHtml(p.name)} <span style="color:#8aa">@${escapeHtml(p.username)}</span></span>`).join('')
+    : '<div class="hint">Henüz fotoğrafçı yok. Yüklemeden önce en az bir fotoğrafçı ekleyin.</div>';
+  // Dropdown
+  const sel=document.getElementById('up-photographer');
+  sel.innerHTML = items.length
+    ? items.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')
+    : '<option value="">— Önce fotoğrafçı ekleyin —</option>';
+}
+async function addPhotographer(){
+  const name=document.getElementById('pg-name').value.trim();
+  const username=document.getElementById('pg-username').value.trim();
+  if(!name||!username){ toast('Ad ve kullanıcı adı gerekli.'); return; }
+  const res=await fetch('/photographers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,username})});
+  if(res.ok){ toast('Fotoğrafçı eklendi.'); document.getElementById('pg-name').value=''; document.getElementById('pg-username').value=''; loadPhotographers(); }
+  else{ const e=await res.json().catch(()=>({})); toast(e.detail||'Eklenemedi.'); }
+}
+const UPLOAD_CHUNK=25;  // parca basina foto sayisi
+
+// Yontem 1: bilgisayardan parcali yukleme
+async function uploadPhotos(){
+  const pid=document.getElementById('up-photographer').value;
+  const files=[...document.getElementById('up-files').files];
+  if(!pid){ toast('Önce bir fotoğrafçı seçin/ekleyin.'); return; }
+  if(!files.length){ toast('Yüklenecek fotoğraf seçin.'); return; }
+
+  const btn=document.getElementById('up-btn'); btn.disabled=true; btn.textContent='Yükleniyor…';
+  const prog=document.getElementById('up-progress'), bar=document.getElementById('up-bar'),
+        lbl=document.getElementById('up-progress-label'), box=document.getElementById('up-result');
+  box.style.display='none'; prog.style.display='block'; lbl.style.display='block';
+  bar.style.width='0%'; lbl.textContent=`0 / ${files.length} yüklendi`;
+
+  let done=0, toplamAtlanan=0;
+  try{
+    for(let i=0;i<files.length;i+=UPLOAD_CHUNK){
+      const batch=files.slice(i,i+UPLOAD_CHUNK);
+      const fd=new FormData(); fd.append('photographer_id',pid);
+      batch.forEach(f=>fd.append('files',f));
+      const res=await fetch('/photos/upload',{method:'POST',body:fd});
+      if(!res.ok){ toast('Bir grup yüklenemedi, tekrar deneyin.'); break; }
+      const data=await res.json();
+      toplamAtlanan += (data.atlanan||0);
+      done+=batch.length;
+      const pct=Math.round(done/files.length*100);
+      bar.style.width=pct+'%'; lbl.textContent=`${done} / ${files.length} yüklendi (%${pct})`;
+    }
+    box.innerHTML=`✅ ${done} fotoğraf yüklendi${toplamAtlanan?`, ${toplamAtlanan} dosya atlandı (tür/boyut)`:''}. İşleme durumu aşağıda.`;
+    box.style.display='block';
+    document.getElementById('up-files').value='';
+    startProcPolling();
+  }catch(e){ toast('Sunucuya ulaşılamadı.'); }
+  finally{ btn.disabled=false; btn.textContent='Yükle'; }
+}
+
+// Yontem 2: sunucudaki klasorden isle
+async function ingestFolder(){
+  const pid=document.getElementById('up-photographer').value;
+  const folder=document.getElementById('up-folder').value.trim();
+  if(!pid){ toast('Önce bir fotoğrafçı seçin/ekleyin.'); return; }
+  if(!folder){ toast('Klasör yolu girin.'); return; }
+  const btn=document.getElementById('ingest-btn'); btn.disabled=true; btn.textContent='İşleniyor…';
+  const box=document.getElementById('up-result'); box.style.display='none';
+  try{
+    const res=await fetch('/photos/ingest',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({photographer_id:Number(pid),folder})});
+    const data=await res.json();
+    if(res.ok){
+      box.innerHTML=`✅ ${data.eklenen} fotoğraf kuyruğa eklendi${data.atlanan?`, ${data.atlanan} atlandı`:''}. İşleme durumu aşağıda.`;
+      box.style.display='block';
+      startProcPolling();
+    }else{ toast(data.detail||'Klasör işlenemedi.'); }
+  }catch(e){ toast('Sunucuya ulaşılamadı.'); }
+  finally{ btn.disabled=false; btn.textContent='Klasörü İşle'; }
+}
+
+// Canli isleme durumu (kuyruk bosalana kadar)
+let _procTimer=null;
+async function startProcPolling(){
+  const box=document.getElementById('proc-box'); box.style.display='block';
+  if(_procTimer) clearInterval(_procTimer);
+  const tick=async()=>{
+    let d; try{ d=await fetch('/photos/durum').then(r=>r.json()); }catch(e){ return; }
+    const kalan=d.pending+d.processing;
+    const errTxt = d.error ? ` <span class="err">• ${d.error} hata</span>` : '';
+    if(kalan>0){
+      box.innerHTML=`⏳ İşleniyor… ${d.done}/${d.toplam} tamamlandı, ${kalan} bekliyor${errTxt}`;
+    }else{
+      box.innerHTML=`✅ İşleme tamamlandı — ${d.done}/${d.toplam} foto işlendi${errTxt}`;
+      clearInterval(_procTimer); _procTimer=null;
+    }
+  };
+  tick(); _procTimer=setInterval(tick,2500);
+}
+
+/* ---------------- URUNLER ---------------- */
+async function loadProducts(){
+  const items=await fetch('/products').then(r=>r.json());
+  const grid=document.getElementById('prod-list-grid'),empty=document.getElementById('empty');
+  grid.innerHTML='';
+  if(!items.length){grid.style.display='none';empty.style.display='block';return;}
+  grid.style.display='grid';empty.style.display='none';
+  for(const p of items){
+    const free=p.photo_count==null;
+    const countPill=free?`<span class="pill pill-free">Serbest seçim</span>`:`<span class="pill pill-count">${p.photo_count} fotoğraf</span>`;
+    const statusPill=p.is_active?`<span class="pill pill-on">Aktif</span>`:`<span class="pill pill-off">Pasif</span>`;
+    const card=document.createElement('div');card.className='prod-card2';
+    card.innerHTML=`
+      <div class="pc2-top">
+        <div><div class="pc2-name">${escapeHtml(p.name)}</div>${p.description?`<div class="pc2-desc">${escapeHtml(p.description)}</div>`:''}</div>
+        ${statusPill}
+      </div>
+      <div class="pc2-mid">
+        <div class="pc2-price">${tl(p.price)}${free?' <span>/ foto</span>':''}</div>
+        ${countPill}
+      </div>
+      <div class="pc2-actions">
+        <button class="btn btn-mini btn-edit" onclick='startEdit(${JSON.stringify(p)})'>✎ Düzenle</button>
+        <button class="btn btn-mini btn-del" onclick="delProduct(${p.id},${JSON.stringify(p.name)})">🗑 Sil</button>
+      </div>`;
+    grid.appendChild(card);
+  }
+}
+async function saveProduct(){
+  const id=document.getElementById('edit-id').value;
+  const name=document.getElementById('f-name').value.trim();
+  const price=document.getElementById('f-price').value;
+  const count=document.getElementById('f-count').value;
+  const desc=document.getElementById('f-desc').value.trim();
+  const active=document.getElementById('f-active').checked;
+  if(!name){toast('Ürün adı gerekli.');return;}
+  if(price===''||Number(price)<0){toast('Geçerli bir fiyat girin.');return;}
+  const body={name,price:Number(price),photo_count:count===''?null:Number(count),description:desc||null,is_active:active};
+  let res;
+  if(id){res=await fetch('/products/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
+  else{res=await fetch('/products',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
+  if(res.ok){toast(id?'Ürün güncellendi.':'Ürün eklendi.');resetForm();loadProducts();}
+  else{toast('Hata oluştu.');}
+}
+function startEdit(p){
+  document.getElementById('edit-id').value=p.id;
+  document.getElementById('f-name').value=p.name;
+  document.getElementById('f-price').value=p.price;
+  document.getElementById('f-count').value=p.photo_count!=null?p.photo_count:'';
+  document.getElementById('f-desc').value=p.description||'';
+  document.getElementById('f-active').checked=p.is_active;
+  document.getElementById('form-title').textContent='✏️ Ürünü Düzenle';
+  document.getElementById('save-btn').textContent='Güncelle';
+  document.getElementById('cancel-btn').style.display='inline-block';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function resetForm(){
+  document.getElementById('edit-id').value='';
+  ['f-name','f-price','f-count','f-desc'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('f-active').checked=true;
+  document.getElementById('form-title').textContent='➕ Yeni Ürün Ekle';
+  document.getElementById('save-btn').textContent='Kaydet';
+  document.getElementById('cancel-btn').style.display='none';
+}
+async function delProduct(id,name){
+  if(!confirm(`"${name}" ürünü silinsin mi?`))return;
+  const res=await fetch('/products/'+id,{method:'DELETE'});
+  if(res.ok){toast('Ürün silindi.');loadProducts();}else{toast('Silinemedi.');}
+}
+
+/* ---------------- SIPARISLER ---------------- */
+let orderView='yeni', orderPage=0; const ORDER_PAGE_SIZE=20;
+let ordersById={};
+
+function setOrderView(v){
+  orderView=v; orderPage=0;
+  document.getElementById('sub-yeni').classList.toggle('active',v==='yeni');
+  document.getElementById('sub-hazir').classList.toggle('active',v==='hazir');
+  loadOrders();
+}
+async function refreshCounts(){
+  try{
+    const c=await fetch('/orders/sayilar').then(r=>r.json());
+    document.getElementById('cnt-yeni').textContent=c.yeni;
+    document.getElementById('cnt-hazir').textContent=c.hazir;
+    const nb=document.getElementById('nav-cnt');
+    nb.textContent=c.yeni; nb.style.display=c.yeni>0?'inline-block':'none';
+    return c;
+  }catch(e){ return null; }
+}
+async function loadOrders(){
+  const list=document.getElementById('orders-list');
+  list.innerHTML='<div class="empty">Yükleniyor…</div>';
+  const c=await refreshCounts();
+  const total = c ? c[orderView] : 0;
+  const offset=orderPage*ORDER_PAGE_SIZE;
+  const orders=await fetch(`/orders?status=${orderView}&limit=${ORDER_PAGE_SIZE}&offset=${offset}`).then(r=>r.json()).catch(()=>[]);
+  list.innerHTML=''; ordersById={};
+  if(!orders.length){
+    list.innerHTML=`<div class="empty">${orderView==='yeni'?'Bekleyen sipariş yok. 🎉':'Hazır sipariş yok.'}</div>`;
+    renderPager(0); return;
+  }
+  orders.forEach(o=>{ ordersById[o.id]=o; list.appendChild(orderCard(o)); });
+  renderPager(total);
+}
+function renderPager(total){
+  const pager=document.getElementById('orders-pager');
+  const pages=Math.max(1,Math.ceil(total/ORDER_PAGE_SIZE));
+  if(total<=ORDER_PAGE_SIZE){ pager.innerHTML=''; return; }
+  pager.innerHTML=`
+    <button class="btn btn-mini" ${orderPage<=0?'disabled':''} onclick="if(orderPage>0){orderPage--;loadOrders();}">‹ Önceki</button>
+    <span>Sayfa ${orderPage+1} / ${pages} • ${total} sipariş</span>
+    <button class="btn btn-mini" ${orderPage>=pages-1?'disabled':''} onclick="if(orderPage<${pages-1}){orderPage++;loadOrders();}">Sonraki ›</button>`;
+}
+function fmtDate(iso){
+  return new Date(iso).toLocaleString('tr-TR',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+// Kompakt tiklanabilir kart (detay modalda acilir)
+function orderCard(o){
+  const revised = o.revised ? '<span class="rev-badge">✏️ DÜZENLENDİ</span>' : '';
+  const card=document.createElement('div'); card.className='order-card'+(o.revised?' revised':'');
+  card.onclick=()=>openOrderDetail(o.id);
+  card.innerHTML=`
+    <div class="oc-in">
+      <div class="oc-top"><span class="oc-id">Sipariş #${o.id}</span>${revised}</div>
+      <div class="oc-date">🕐 ${fmtDate(o.created_at)}</div>
+      <div class="oc-div"></div>
+      <div class="oc-row oc-prod-row"><span>📦 ${escapeHtml(o.product_name||'—')}</span>${o.toplam_fiyat!=null?`<span class="oc-price">${tl(o.toplam_fiyat)}</span>`:''}</div>
+      <div class="oc-row">🖼️ ${o.foto_sayisi} fotoğraf</div>
+      <div class="oc-row oc-email">✉️ ${escapeHtml(o.email||'—')}</div>
+      <div class="oc-folder">📁 siparis_${String(o.id).padStart(4,'0')}</div>
+    </div>`;
+  return card;
+}
+
+// Detay penceresi
+function openOrderDetail(id){
+  const o=ordersById[id]; if(!o) return;
+  const dt=fmtDate(o.created_at);
+  const klasor=`siparis_${String(o.id).padStart(4,'0')}`;
+  const revised = o.revised ? '<span class="pill" style="background:#fdecea;color:#e5503a;margin-left:8px">✏️ DÜZENLENDİ</span>' : '';
+  const editCount=o.items.filter(it=>it.note && it.note.trim()).length;
+  const photos=o.items.map((it,i)=>{
+    const fname=`${String(i+1).padStart(2,'0')}_foto${it.photo_id}`;
+    const has=it.note && it.note.trim();
+    return `<div class="mp ${has?'has-edit':''}">
+      <img src="/photos/${it.photo_id}/image?filigran=false&boyut=galeri" loading="lazy">
+      <div class="mp-body">
+        <div class="mp-fname">${fname}</div>
+        ${has
+          ? `<div class="mp-edit has"><span class="lbl">🖌️ Yapılacak düzenleme</span>${escapeHtml(it.note)}</div>`
+          : `<div class="mp-edit none">düzenleme yok</div>`}
+      </div>
+    </div>`;}).join('');
+  const summary = editCount>0
+    ? `<div class="edit-summary">🖌️ <span><b>${editCount}</b> fotoğrafta düzenleme isteniyor</span> <span style="color:var(--muted);font-weight:500">(${o.foto_sayisi} fotoğrafın)</span></div>`
+    : `<div class="edit-summary none">✓ Bu siparişte özel düzenleme isteği yok (${o.foto_sayisi} fotoğraf)</div>`;
+  const actionBtn = o.status==='yeni'
+    ? `<button class="btn-ready" onclick="markStatusFromDetail(${o.id},'hazir')">✓ Hazır İşaretle</button>`
+    : `<button class="btn-unready" onclick="markStatusFromDetail(${o.id},'yeni')">↩ Yeniden Yeni'ye Al</button>`;
+  const emailBtn = o.email ? `<button class="copy" onclick="copyEmail(${JSON.stringify(o.email)},this)"><span>📋</span> Kopyala</button>` : '';
+  document.getElementById('order-modal-body').innerHTML=`
+    <div class="modal-head">
+      <div>
+        <h2>Sipariş #${o.id}${revised}</h2>
+        <div class="modal-sub">${dt} • 📁 <b>${klasor}</b></div>
+      </div>
+      <button class="modal-close" onclick="closeOrderModal()">✕</button>
+    </div>
+    <div class="modal-info">
+      <div class="row"><span class="lbl">📦 Paket</span> <b>${escapeHtml(o.product_name||'—')}</b>${o.toplam_fiyat!=null?' <b style="color:var(--brand)">'+tl(o.toplam_fiyat)+'</b>':''}</div>
+      <div class="row"><span class="lbl">✉️ E-posta</span> <b>${escapeHtml(o.email||'—')}</b>${emailBtn}</div>
+    </div>
+    ${summary}
+    <div class="modal-photos">${photos}</div>
+    <div class="modal-actions">${actionBtn}</div>`;
+  document.getElementById('order-modal').classList.add('show');
+}
+function closeOrderModal(){ document.getElementById('order-modal').classList.remove('show'); }
+async function copyEmail(email,btn){
+  try{
+    await navigator.clipboard.writeText(email);
+    if(btn){ const eski=btn.innerHTML; btn.innerHTML='✓ Kopyalandı'; btn.classList.add('copied');
+      setTimeout(()=>{ btn.innerHTML=eski; btn.classList.remove('copied'); },1600); }
+    toast('E-posta kopyalandı');
+  }catch(e){ toast('Kopyalanamadı — elle seçin: '+email); }
+}
+async function markStatusFromDetail(id,status){
+  await setStatus(id,status);   // PATCH + listeyi yeniler
+  closeOrderModal();
+}
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeOrderModal(); });
+async function setStatus(id,status){
+  const res=await fetch(`/orders/${id}/status`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
+  if(res.ok){toast('Durum güncellendi: '+status.toUpperCase());loadOrders();}
+  else{toast('Güncellenemedi.');}
+}
+// Siparis klasorunu (editor icin) olustur/yenile ve yolunu goster
+async function exportFolder(orderId){
+  toast('Sipariş klasörü hazırlanıyor…');
+  try{
+    const res=await fetch(`/orders/${orderId}/export`,{method:'POST'});
+    const d=await res.json();
+    if(res.ok){ alert('Sipariş klasörü hazır:\n\n'+d.klasor+'\n\nEditör bu klasörden fotoğrafları alıp düzenleyebilir.'); }
+    else{ toast(d.detail||'Klasör oluşturulamadı.'); }
+  }catch(e){ toast('Sunucuya ulaşılamadı.'); }
+}
+// Photoshop'lu (duzenlenmis) versiyonu yukle
+async function uploadEdited(orderId,itemId,input){
+  if(!input.files.length) return;
+  const fd=new FormData(); fd.append('file',input.files[0]);
+  toast('Düzenlenmiş fotoğraf yükleniyor…');
+  try{
+    const res=await fetch(`/orders/${orderId}/items/${itemId}/edited`,{method:'POST',body:fd});
+    if(res.ok){ toast('Düzenlenmiş versiyon kaydedildi ✅'); loadOrders(); }
+    else{ const e=await res.json().catch(()=>({})); toast(e.detail||'Yüklenemedi.'); }
+  }catch(e){ toast('Sunucuya ulaşılamadı.'); }
+  input.value='';
+}
+
+showTab('orders');   // acilis: Siparisler sekmesi
+
+// Sayilari periyodik yenile (sidebar + sekme rozetleri); liste kaymasin diye otomatik
+// re-render YOK -- operator yeni sayiyi gorunce Yenile'ye basar.
+setInterval(refreshCounts, 15000);
+</script>
+</body>
+</html>
