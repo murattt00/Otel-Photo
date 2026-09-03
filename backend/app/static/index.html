@@ -187,6 +187,7 @@
   .cart-row img{width:46px;height:46px;object-fit:cover;border-radius:8px;flex-shrink:0;}
   .cart-row input{flex:1;min-width:0;border:1.5px solid #e5edf0;border-radius:8px;padding:7px 9px;font-size:13px;font-family:var(--font);}
   .cart-row input:focus{outline:none;border-color:var(--brand-1);}
+  .po-kilitli{opacity:.62;}
   .cart-email-box{margin-bottom:10px;}
   .cart-email-box label{display:block;font-size:13px;font-weight:700;color:var(--ink);margin-bottom:5px;}
   .cart-total{margin:4px 0 12px;font-size:14px;color:#6b8591;font-weight:600;}
@@ -478,14 +479,17 @@ function renderPastOrders(){
   pastOrders.forEach((o,idx)=>{
     const dt=new Date(o.created_at).toLocaleDateString('tr-TR',{day:'numeric',month:'long'});
     const d=durum[o.status]||['po-yeni',o.status];
-    // Teslim edilmemis her siparis duzenlenebilir; duzenleyince "yeni"ye geri duser.
-    const editable=o.status!=='teslim';
+    /* Kilit karari SUNUCUDAN gelir (o.duzenlenebilir). Burada "status!=='teslim'" diye
+       kendi kuralimizi yazmiyoruz: teslim durumu bir donem hic set edilmedigi icin bu
+       kontrol her siparisi sonsuza kadar duzenlenebilir birakmisti. Kural tek yerde
+       (backend/app/routers/orders.py -> DUZENLENEBILIR_DURUMLAR) duruyor. */
+    const editable=o.duzenlenebilir;
     const editing = editingOrder && editingOrder.id===o.id;
     const fiyat = o.toplam_fiyat!=null ? ' • '+tl(o.toplam_fiyat) : '';
     const altYazi = editing
       ? '<b style="color:var(--brand-2)">✏️ şu an düzenleniyor</b>'
-      : (editable ? '✏️ düzenlemek için dokunun' : '');
-    html+=`<div class="po-item ${editing?'editing':''}" ${editable?`onclick="editOrder(${idx})" style="cursor:pointer"`:''}>
+      : (editable ? '✏️ düzenlemek için dokunun' : '🔒 değiştirilemez');
+    html+=`<div class="po-item ${editing?'editing':''} ${editable?'':'po-kilitli'}" ${editable?`onclick="editOrder(${idx})" style="cursor:pointer"`:`onclick="kilitliUyar(${idx})" style="cursor:default"`}>
       <div class="po-left">
         <b>${editing?'✏️ ':''}Sipariş #${o.id} — ${escapeHtml(o.product_name||'—')}${fiyat}</b>
         <div>${dt} • ${o.foto_sayisi} fotoğraf${altYazi?' • '+altYazi:''}</div>
@@ -512,10 +516,19 @@ function startNewOrder(){
   toast('Yeni sipariş — galeriden fotoğraf seçin.');
 }
 
+/* Kilitli siparise dokunulunca sebebini soyle (sessizce yutma -- musteri neden
+   dokunamadigini anlamali). Metin sunucudan gelir. */
+function kilitliUyar(idx){
+  const o=pastOrders[idx];
+  if(!o) return;
+  toast(o.kilit_sebebi || 'Bu sipariş artık değiştirilemez.');
+}
+
 // Onceki siparisi duzenleme moduna gir (ayni ekranda: sepet dolar)
 function editOrder(idx){
   const o=pastOrders[idx];
-  if(!o || o.status==='teslim'){ toast('Bu sipariş teslim edildiği için değiştirilemez.'); return; }
+  if(!o) return;
+  if(!o.duzenlenebilir){ kilitliUyar(idx); return; }
   editingOrder=o;
   selected.clear(); notes={};
   o.items.forEach(it=>{ selected.add(it.photo_id); notes[it.photo_id]=it.note||''; });
@@ -647,9 +660,10 @@ async function confirmOrder(){
   // Duzenleme -> PATCH /orders/{id}; yeni -> POST /orders
   const url = editingOrder ? '/orders/'+editingOrder.id : '/orders';
   const method = editingOrder ? 'PATCH' : 'POST';
-  const body = editingOrder
-    ? { product_id:selectedProduct.id, email, items }
-    : { customer_id:currentCustomerId, product_id:selectedProduct.id, email, items };
+  // customer_id her iki durumda da gonderilir: yeni sipariste sahibi belirler,
+  // guncellemede sunucu siparisin sahibiyle karsilastirir (baskasinin siparisini
+  // id artirarak degistirmeyi engeller).
+  const body = { customer_id:currentCustomerId, product_id:selectedProduct.id, email, items };
   try{
     const res=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(res.ok){
@@ -663,7 +677,16 @@ async function confirmOrder(){
       showScreen('screen-success');
     }else{
       const err=await res.json().catch(()=>({}));
-      toast(err.detail||'İşlem başarısız.'); btn.disabled=false; btn.textContent=eskiEtiket;
+      toast(err.detail||'İşlem başarısız.');
+      btn.disabled=false; btn.textContent=eskiEtiket;
+      /* 409 = operator bu arada siparisi "hazir" yapmis (musteri ekrani bayat kalmisti).
+         Duzenleme modundan cik ve listeyi tazele ki kilit ekranda da gorunsun. */
+      if(res.status===409 || res.status===403){
+        editingOrder=null;
+        document.getElementById('co-confirm').textContent='Siparişi Onayla ✓';
+        document.getElementById('result-title-text').textContent='Fotoğraflarınız 🎉';
+        await loadPastOrders(currentCustomerId);
+      }
     }
   }catch(e){
     toast('Sunucuya ulaşılamadı.'); btn.disabled=false; btn.textContent=eskiEtiket;

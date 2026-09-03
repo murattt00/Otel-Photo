@@ -4,7 +4,13 @@ Siparis (sepet) endpointleri.
 - POST   /orders            -> kioskta musteri sepeti onaylayinca cagrilir; siparis olusur (status=yeni)
 - GET    /orders            -> operator gelen siparisleri gorur (status filtresi opsiyonel)
 - GET    /orders/{id}       -> siparis detayi (fotolar + notlar)
+- PATCH  /orders/{id}       -> musteri sepetini gunceller (SADECE 'yeni' durumdayken)
 - PATCH  /orders/{id}/status-> operator durumu gunceller (yeni -> hazir -> teslim)
+
+Durum akisi ve kilit:
+  yeni   : musteri kioskta olusturdu/guncelledi. Duzenlenebilen TEK durum.
+  hazir  : operator photoshop'u bitirdi -> zip OTOMATIK hazirlanir. Musteri artik dokunamaz.
+  teslim : operator paketi gercekten gonderdi. Dongu kapanir.
 
 Onemli: satilan her foto, cekildigi fotografciya (Photo.uploaded_by_id) baglidir; bu sayede
 "fotografci basina satis" raporu OrderItem -> Photo -> Photographer zinciriyle cikarilabilir.
@@ -29,6 +35,46 @@ from app.services.auth_service import is_logged_in, require_operator
 router = APIRouter(prefix="/orders", tags=["siparisler"])
 
 GECERLI_DURUMLAR = {"yeni", "hazir", "teslim"}
+
+# Musterinin kioskta siparisi degistirebildigi TEK durum. Operator "Hazir" dedigi anda
+# photoshop bitmis ve paket hazirlanmistir; sonrasinda gelen bir musteri duzenlemesi
+# editorun emegini cope atardi (siparis klasorundeki duzenlenmis dosyalar yeniden
+# numaralanip orijinalle degistirilir). Bu yuzden kilit "hazir"da baslar.
+DUZENLENEBILIR_DURUMLAR = {"yeni"}
+
+# Operatorun yapabilecegi durum gecisleri. Serbest birakilsaydi 'yeni' -> 'teslim' gibi
+# paketlemeyi atlayan bir gecis mumkun olurdu.
+GECERLI_GECISLER: dict[str, set[str]] = {
+    "yeni": {"hazir"},
+    "hazir": {"yeni", "teslim"},
+    "teslim": {"hazir"},  # geri alma; 'yeni'ye donmek icin once 'hazir'dan gecilir
+}
+
+KILIT_SEBEPLERI = {
+    "hazir": "Bu siparis hazirlandi ve artik degistirilemez. "
+             "Degisiklik icin lutfen gorevliye danisin.",
+    "teslim": "Bu siparis teslim edildi, degistirilemez. "
+              "Dilerseniz yeni bir siparis olusturabilirsiniz.",
+}
+
+
+def _duzenlenebilir(order: models.Order) -> bool:
+    return order.status in DUZENLENEBILIR_DURUMLAR
+
+
+def _bayat_paketi_temizle(order: models.Order) -> None:
+    """Siparisin icerigi degistiginde gonderilecek klasorundeki zip GECERSIZ olur.
+
+    Operator orada duran bayat zip'i gorup yanlislikla musteriye gonderebilir; bu yuzden
+    hem dosyayi siliyoruz hem de packaged_at'i temizliyoruz (panel "paket yok" gostersin).
+    """
+    order.packaged_at = None
+    yol = delivery.paket_yolu(order.id)
+    if yol.exists():
+        try:
+            yol.unlink()
+        except OSError:
+            pass
 
 
 def _validate_product_and_photos(db: Session, product_id: int | None, items) -> None:
@@ -80,6 +126,10 @@ def _serialize(order: models.Order) -> schemas.OrderOut:
         revised=order.revised_at is not None,
         foto_sayisi=len(order.items),
         toplam_fiyat=_order_total(order),
+        duzenlenebilir=_duzenlenebilir(order),
+        kilit_sebebi=None if _duzenlenebilir(order) else KILIT_SEBEPLERI.get(order.status),
+        packaged_at=order.packaged_at,
+        delivered_at=order.delivered_at,
         items=[
             schemas.OrderItemOut(
                 id=it.id, photo_id=it.photo_id, note=it.note, edited=bool(it.edited_path)
@@ -147,8 +197,14 @@ def list_orders(
         query = query.filter(models.Order.customer_id == customer_id)
     if email:
         query = query.filter(models.Order.email == email)
-    # Yeni sekmesinde: once duzenlenmis (revised) olanlar dikkat ceksin, sonra en yeni
-    query = query.order_by(models.Order.created_at.desc())
+    # GUNCELLIK SIRASI: created_at ile siralarsak, 3 gun onceki bir siparis musteri
+    # tarafindan duzenlenip "yeni" sekmesine geri dustugunde listenin DIBINDE (5. sayfada)
+    # kalirdi -- operator onu hic gormezdi, musteri beklerdi. revised_at varsa o, yoksa
+    # created_at esas alinir; boylece her dokunulan siparis basa gelir.
+    query = query.order_by(
+        func.coalesce(models.Order.revised_at, models.Order.created_at).desc(),
+        models.Order.id.desc(),
+    )
     if offset:
         query = query.offset(offset)
     if limit is not None:
@@ -164,6 +220,7 @@ def order_counts(db: Session = Depends(get_db)):
     return {
         "yeni": sayim.get("yeni", 0),
         "hazir": sayim.get("hazir", 0),
+        "teslim": sayim.get("teslim", 0),
         "toplam": sum(sayim.values()),
     }
 
@@ -184,11 +241,28 @@ def update_order(
     background: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    """Mevcut bir siparisi (sepeti) gunceller. Sadece 'yeni' durumdakiler duzenlenebilir;
-    operator 'hazir'/'teslim' yaptiysa degistirilemez (409)."""
+    """Mevcut bir siparisi (sepeti) gunceller.
+
+    SADECE 'yeni' durumdakiler duzenlenebilir. Operator "Hazir" dedigi anda photoshop bitmis
+    ve paket hazirlanmistir; o noktadan sonra gelen bir musteri duzenlemesi editorun emegini
+    cope atardi. 'hazir'/'teslim' icin 409 doner ve arayuz kilit sebebini gosterir.
+
+    Sahiplik: gelen customer_id, siparisin sahibiyle ayni olmali (403). Bu tam bir kimlik
+    dogrulamasi degil -- kiosk oturum token'i eklenene kadar, id artirarak baskasinin
+    siparisini degistirmeyi engelleyen asgari korumadir.
+    """
     order = db.get(models.Order, order_id)
     if order is None:
         raise HTTPException(status_code=404, detail="Siparis bulunamadi.")
+
+    if data.customer_id != order.customer_id:
+        raise HTTPException(status_code=403, detail="Bu siparis size ait degil.")
+
+    if not _duzenlenebilir(order):
+        raise HTTPException(
+            status_code=409,
+            detail=KILIT_SEBEPLERI.get(order.status, "Bu siparis artik degistirilemez."),
+        )
 
     _validate_product_and_photos(db, data.product_id, data.items)
 
@@ -202,32 +276,34 @@ def update_order(
     for it in data.items:
         order.items.append(models.OrderItem(photo_id=it.photo_id, note=it.note))
 
-    # Musteri duzenledi -> siparis "yeni" sekmesine geri duser + "duzenlendi" isaretlenir.
-    # (Operator hazir yapmis olsa bile tekrar bakmasi gerekir.)
-    order.status = "yeni"
+    # Siparis zaten 'yeni'ydi (yukarida kontrol edildi); "duzenlendi" damgasi vurulur ki
+    # operator listede fark etsin ve siparis guncellik sirasinda one cikabilsin.
     order.revised_at = datetime.now(timezone.utc)
+
+    # Icerik degisti -> varsa onceki zip artik gecersiz.
+    _bayat_paketi_temizle(order)
 
     db.commit()
     db.refresh(order)
-
-    # TUZAK ONLEME: bu siparis icin daha once "Gonderime Hazirla" yapildiysa, gonderilecek
-    # klasorunde ARTIK GECERSIZ bir zip duruyor demektir (musteri foto ekledi/cikardi).
-    # Operator onu gorup yanlislikla musteriye gonderebilir -> bayat paketi siliyoruz.
-    # Operator siparisi tekrar "hazir" yapip yeniden paketleyecek.
-    eski_paket = delivery.paket_yolu(order.id)
-    if eski_paket.exists():
-        try:
-            eski_paket.unlink()
-        except OSError:
-            pass
 
     background.add_task(export_order, order.id)  # klasoru guncelle (eksik fotolari ekler)
     return _serialize(order)
 
 
-@router.patch("/{order_id}/status", response_model=schemas.OrderOut, dependencies=[Depends(require_operator)])
+@router.patch(
+    "/{order_id}/status",
+    response_model=schemas.OrderStatusResult,
+    dependencies=[Depends(require_operator)],
+)
 def update_status(order_id: int, data: schemas.OrderStatusUpdate, db: Session = Depends(get_db)):
-    """Operator siparis durumunu gunceller."""
+    """Operator siparis durumunu gunceller: yeni -> hazir -> teslim (ve geri alma).
+
+    'hazir'a GECERKEN PAKET OTOMATIK HAZIRLANIR. Eskiden "Hazir" ve "Gonderime Hazirla" iki
+    ayri butondu; operator ilkine basip ikincisini unutunca gonderilecek klasorune hicbir sey
+    dusmuyor ama panelde her sey bitmis gorunuyordu -- sessiz kayip. Artik tek tik.
+
+    'teslim' = operator paketi GERCEKTEN gonderdi. Paketi olmayan siparis teslim edilemez.
+    """
     if data.status not in GECERLI_DURUMLAR:
         raise HTTPException(
             status_code=400, detail=f"Gecersiz durum. Gecerli: {', '.join(GECERLI_DURUMLAR)}"
@@ -235,10 +311,58 @@ def update_status(order_id: int, data: schemas.OrderStatusUpdate, db: Session = 
     order = db.get(models.Order, order_id)
     if order is None:
         raise HTTPException(status_code=404, detail="Siparis bulunamadi.")
-    order.status = data.status
+
+    hedef = data.status
+    if hedef == order.status:  # ayni durum -> islem yok
+        return schemas.OrderStatusResult(siparis=_serialize(order))
+
+    if hedef not in GECERLI_GECISLER.get(order.status, set()):
+        raise HTTPException(
+            status_code=409,
+            detail=f"'{order.status}' durumundan '{hedef}' durumuna gecilemez.",
+        )
+
+    # Teslim = gonderildi. Paket yoksa gonderilecek bir sey de yoktur; operatoru
+    # "gonderdim" demekten alikoyuyoruz (paketleme sirasinda hata olmus olabilir).
+    if hedef == "teslim" and order.packaged_at is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Bu siparisin paketi hazirlanmamis. Once 'Yeniden Paketle' ile zip'i olusturun.",
+        )
+
+    order.status = hedef
+    if hedef == "teslim":
+        order.delivered_at = datetime.now(timezone.utc)
+    else:
+        order.delivered_at = None  # geri alindi -> teslim damgasi kalkar
+
+    if hedef == "yeni":
+        # Musteri tekrar duzenleyebilir hale geliyor -> mevcut zip bayatlayacak.
+        _bayat_paketi_temizle(order)
+
+    # Paketleme siparis KLASORUNU okur ve kendi DB oturumunu acar (export_order); bu yuzden
+    # durum degisikligini once yaziyoruz ki paketleme tutarli veriyle calissin.
     db.commit()
     db.refresh(order)
-    return _serialize(order)
+
+    paket = None
+    paket_hatasi = None
+    if hedef == "hazir":
+        try:
+            sonuc = delivery.paket_hazirla(db, order)
+            if sonuc.get("hazir"):
+                paket = sonuc
+                order.packaged_at = datetime.now(timezone.utc)
+                db.commit()
+                db.refresh(order)
+            else:
+                paket_hatasi = sonuc.get("mesaj", "Paket hazirlanamadi.")
+        except Exception as e:  # noqa: BLE001 -- paketleme coksun diye durum degisikligi kaybolmasin
+            paket_hatasi = f"Paket hazirlanamadi: {e}"
+
+    return schemas.OrderStatusResult(
+        siparis=_serialize(order), paket=paket, paket_hatasi=paket_hatasi
+    )
 
 
 # ---- Photoshop / duzenlenmis versiyon + teslim paketi ----
@@ -308,6 +432,10 @@ def export_order_folder(order_id: int, db: Session = Depends(get_db)):
 def gonderime_hazirla(order_id: int, db: Session = Depends(get_db)):
     """Siparisi gonderime hazirlar: siparis_XXXX klasorunu zip'leyip GONDERILECEK_DIR'e koyar.
 
+    NOT: normal akista bu ADIM OTOMATIKTIR -- operator "Hazir" deyince paket kendiliginden
+    olusur (bkz. update_status). Bu uc, editor dosyalara sonradan dokunursa kullanilan
+    "Yeniden Paketle" yoludur.
+
     Teslimatin tek kaynagi siparis klasorudur -- editor orada ne biraktiysa pakete o girer
     (bkz. services/delivery.py). Operator olusan zip'i alip istedigi yolla gonderir:
     mail eki, WeTransfer, TransferNow... Sistem gondermez, sadece paketi hazirlar.
@@ -319,6 +447,11 @@ def gonderime_hazirla(order_id: int, db: Session = Depends(get_db)):
     sonuc = delivery.paket_hazirla(db, order)
     if not sonuc.get("hazir"):
         raise HTTPException(status_code=400, detail=sonuc.get("mesaj", "Paket hazirlanamadi."))
+
+    # Paketin varligi artik diskteki zip'ten DEGIL bu damgadan okunuyor: operator zip'i
+    # alip gonderdiginde (klasorden tasidiginda) sistem "hic paketlenmemis" sanmasin.
+    order.packaged_at = datetime.now(timezone.utc)
+    db.commit()
     return sonuc
 
 

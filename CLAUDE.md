@@ -436,8 +436,110 @@ butonu çıkıyor. **Test: aylardır takılı 2 foto (11, 17) tekrar denendi →
 `error: 0`, müşteri sayısı 12 → 16.** (Eski BackgroundTasks döneminden kalma `folder_code`
 çakışmasıydı; tek worker tasarımında sorunsuz geçti.)
 
+### Faz 3F — Sipariş döngüsünün kapatılması + kilit (TAMAMLANDI, doğrulandı)
+
+Akış incelemesinde bulunan **5 mantık hatası** düzeltildi. Hepsi "müşteri siparişi sonradan
+güncelleyebiliyor" yolunun etrafındaydı.
+
+**1) `teslim` durumu artık gerçekten var.** Modelde/şemada tanımlıydı, kioskta rozeti bile
+vardı ama **hiçbir kod onu set etmiyordu**. Sonuç: operatör zip'i gönderdikten sonra sipariş
+sonsuza kadar "hazır" sekmesinde kalıyor, gönderilenle gönderilmeyen ayırt edilemiyordu.
+- Panelde 3. sekme: **🆕 Yeni · ✅ Hazır · 📮 Gönderildi** (sayaçlarıyla).
+- `Order.delivered_at` (yeni kolon) — operatörün "Gönderildi" dediği an.
+
+**2) Müşteri kilidi.** Kioskta koşul `o.status !== 'teslim'` idi; `teslim` hiç set edilmediği
+için **her sipariş sonsuza kadar düzenlenebilirdi** — müşteri ertesi gün gelip çoktan
+editlenmiş, paketlenmiş, gönderilmiş siparişi değiştirebiliyordu.
+- **KARAR (kullanıcı): kilit `hazir`da başlar.** Operatör "Hazır" dediği an photoshop bitmiş
+  demektir; sonraki bir müşteri düzenlemesi editörün emeğini çöpe atardı (sipariş klasöründeki
+  düzenlenmiş dosyalar yeniden numaralanıp orijinalle değiştirilirdi — bkz. bilinen madde 4).
+- Kural **tek yerde**: `orders.py -> DUZENLENEBILIR_DURUMLAR = {"yeni"}`. Kiosk artık kendi
+  kuralını yazmıyor, sunucudan gelen `duzenlenebilir` + `kilit_sebebi` alanlarını kullanıyor.
+- Kilitli siparişe dokununca sebep toast'la gösteriliyor (sessizce yutulmuyor).
+
+**3) `PATCH /orders/{id}` docstring'i yalan söylüyordu.** "Sadece 'yeni' düzenlenebilir …
+değilse 409" yazıyordu ama **o kontrol kodda yoktu**; durumu sorgusuz `yeni`ye çekiyordu.
+- Durum kontrolü eklendi → **409** + Türkçe kilit sebebi.
+- **Sahiplik kontrolü** eklendi: `OrderUpdate.customer_id` zorunlu, siparişin sahibiyle
+  karşılaştırılıyor → **403**. Önceden LAN'daki herkes id artırarak başkasının siparişini
+  değiştirebiliyordu. *Tam kimlik doğrulaması değil* (customer_id'yi bilen yine gönderebilir);
+  kiosk oturum token'ı eklenene kadarki asgari koruma. Kalan açık: `GET /orders/{id}` ve
+  `/kiosk/by-email` hâlâ doğrulamasız.
+- **Geçiş tablosu** (`GECERLI_GECISLER`): `yeni→hazir`, `hazir→{yeni,teslim}`, `teslim→hazir`.
+  `yeni→teslim` (paketlemeyi atlar) ve `teslim→yeni` (doğrudan) artık 409.
+
+**5) Sıralama — düzenlenen sipariş operatörün gözünden kayboluyordu.** Liste
+`created_at DESC` ile geliyordu (kodun kendi yorumu "önce düzenlenmiş olanlar" diyordu ama
+sıralamada `revised_at` yoktu). 3 gün önceki bir sipariş güncellenince "yeni" sekmesine
+düşüyor ama **20'lik sayfalamada 5. sayfada** kalıyordu; operatör hiç görmüyordu.
+→ `ORDER BY COALESCE(revised_at, created_at) DESC, id DESC`.
+
+**6) "Hazır" ≠ "paketlendi" idi.** İki ayrı buton vardı; operatör "Hazır" deyip "Gönderime
+Hazırla"yı unutursa gönderilecek klasörüne hiçbir şey düşmüyor ama panelde her şey bitmiş
+görünüyordu — sessiz kayıp.
+- **KARAR (kullanıcı): "Hazır" artık zip'i OTOMATİK hazırlıyor.** Tek buton:
+  **"✓ Hazırla ve Paketle"**. Cevap `{siparis, paket, paket_hatasi}` şeklinde döner; düzenlenmemiş
+  foto uyarısı toast'ta gösterilir. Paketleme çökerse durum yine değişir ama `paket_hatasi`
+  dolu gelir ve kart "⚠️ paket yok" rozeti gösterir — sessiz geçmez.
+- **"🔄 Yeniden Paketle"** butonu kaldı (editör dosyalara sonradan dokunursa zip'i tazelemek için).
+- `Order.packaged_at` (yeni kolon): **paketin varlığı artık diskteki zip'ten değil DB'den**
+  okunuyor. Eskiden operatör zip'i alıp gönderince (klasörden taşıyınca) sistem "hiç
+  paketlenmemiş" sanıyordu.
+- Paketi olmayan sipariş **`teslim` yapılamaz** (409) — "gönderdim" demenin karşılığı olmalı.
+- İçerik değişince (`müşteri düzenledi` / `hazır→yeni geri alma`) bayat zip siliniyor +
+  `packaged_at` temizleniyor → `_bayat_paketi_temizle()`.
+
+**Migration:** `a1b7c4d90e21` — `orders.packaged_at`, `orders.delivered_at`, `ix_orders_status`.
+Mevcut `hazir` siparişlerden zip'i diskte duran #7 için `packaged_at` zip'in mtime'ından
+geriye dönük dolduruldu; #1 ve #4 gerçekten paketsiz olduğu için ⚠ rozetiyle görünüyor.
+
+**Doğrulama:** `scratchpad/akis_testi.py` — sunucu/GPU başlatmadan router fonksiyonlarını
+gerçek DB'ye karşı süren 28 kontrol (oluştur → düzenle → 403 → 409 → hazır+otomatik zip →
+kilit → teslim → geri alma → sıralama → sayaçlar). **28/28 geçti**, test verisi tamamen
+temizlendi (7 sipariş / 32 foto / 16 müşteri sayıları aynen korundu).
+
+**.gitignore sertleştirildi (kullanıcı isteği: "yanlışlıkla foto commitlemek istemiyorum"):**
+`data/` alt klasörlerini tek tek saymak yerine `data/**` tümü kapatıldı (yeni bir alt klasör
+açılınca .gitignore'a eklemeyi unutmak = foto commitlemek demekti), `.gitkeep`'ler korunuyor.
+Ayrıca **emniyet ağı**: `*.jpg/png/tif/psd/raw/cr2/nef/zip/…` repoda **nerede olursa olsun**
+yok sayılıyor (ayarlardan repo içine yönlendirilmiş sipariş/gönderilecek klasörünü de yakalar).
+`*.sql/*.dump` (pg_dump yedekleri) ve model önbelleği de eklendi. Doğrulandı: sahte
+`.jpg`/`.zip` dosyaları git'e hiç görünmedi. Takip edilen foto zaten yoktu.
+
+**Ölü klasör/config temizliği (aynı oturumda):** `config.py`'de tanımlı ama kodda **hiç
+kullanılmayan** 3 klasör sabiti kaldırıldı — `CUSTOMER_FOLDERS_DIR` (fiziksel müşteri klasörü
+kopyalama Faz C1'de kalkmıştı), `DEBUG_OUTPUT_DIR` (prototip kalıntısı), `EDITED_DIR`
+(teslimat klasör tabanlı olduğundan kullanılmıyordu). Diskte `data/debug_output` (14 MB,
+21 prototip dosyası) ve boş `data/customer_folders` silindi.
+**`data/edited` SİLİNMEDİ** — `OrderItem.edited_path` alanı dolu iki eski kalem (item 23, 33)
+hâlâ oraya işaret ediyor. Bilinen madde 17 (edited_path ölü kod) çözülünce birlikte temizlenmeli.
+`data/raw_uploads` altında DB'de karşılığı olmayan **34 yetim dosya / 9.6 MB** var (madde 15'in
+izi: yükleme yarıda kesilince Photo kaydı geri alınıyor ama dosya diskte kalıyor) — dokunulmadı.
+
 ## Henüz Yapılmayanlar (yol haritası)
 
+- **AKIŞ İNCELEMESİNDEN KALAN AÇIKLAR (2026-09-03).** Faz 3F'de 1, 2, 3, 5, 6 düzeltildi.
+  Sırada bekleyenler, önem sırasıyla:
+  - **(4) Sipariş klasöründe konum bazlı dosya adı** — `{sıra:02d}_foto{id}.jpg`. Müşteri
+    baştaki fotoyu çıkarınca kalanların sırası kayıyor; `_ayikla()` editörün photoshop'ladığı
+    dosyaları `_kaldirilan/`a taşıyıp yerine taze orijinal kopyalıyor → **emek sessizce
+    kayboluyor**. (Faz 3F kilidi bu yolu büyük ölçüde kapattı ama kök sebep duruyor: operatör
+    "geri al" derse yine olur.) Çözüm: addan sıra numarasını at (`foto{photo_id}.ext`).
+  - **(7) `/kiosk/by-email` doğrulamasız** — e-postayı bilen herkes o kişinin fotolarını ve
+    `customer_id`'sini alıyor. KVKK riski. Doğrulama kodu / kiosk oturum token'ı gerekiyor.
+  - **(8) `GET /orders/{id}` auth'suz** — id artırarak tüm siparişler + e-postalar okunabiliyor.
+    (`list_orders` korumalı, tekil uç atlanmış.)
+  - **(9) DB havuzu 5+10, threadpool 40** → yük testinde `QueuePool limit ... timeout`.
+    `pool_size=20, max_overflow=20` yeterli.
+  - **(10) `ingest` dedup yok** (`stored_path`'te unique index de yok) — aynı klasör ikinci kez
+    ingest edilirse foto çift kaydediliyor, **aynı yüz centroid'e ikinci kez ekleniyor**.
+  - **(11) Batch işleme ile canlı kiosk taraması aynı GPU'yu paylaşıyor, öncelik yok.**
+  - **(12) `get_model()` thread-safe değil** (worker ön-yükleme + kiosk taraması çakışırsa iki
+    model → 2× GPU belleği). **(13) `images._ensure` atomik yazmıyor** (bozuk türev riski).
+    **(14) Önbellek sınırsız büyüyor.** **(15) upload'da uzun transaction + yetim dosyalar.**
+  - **(16) `_duzenlendi_mi` substring çakışması**: `"foto5" in "01_foto55"` → True (doğrulandı).
+  - **(17) `OrderItem.edited_path` + `/edited` uçları panelde HİÇ kullanılmıyor** (ölü kod);
+    `update_order` bu alanı zaten sıfırlıyor. Ya UI'ya bağla ya kaldır.
 - **SIRADAKI seçenekler:** (a) **Büyük tasarım revizyonu** (kullanıcı mevcut tasarımı beğenmedi —
   bkz. [[tasarim-revizyonu-bekliyor]]); (b) fotoğrafçı başına satış raporu (veri hazır:
   OrderItem→Photo→Photographer); (c) operatör güvenliği/giriş (Faz 3).

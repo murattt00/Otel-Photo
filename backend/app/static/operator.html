@@ -123,6 +123,9 @@
   .status-yeni{background:#fff3e0;color:#d97706;}
   .status-hazir{background:#e8f1fb;color:#2b6cb0;}
   .status-teslim{background:#e7f7ec;color:#1a9e4b;}
+  .pkg-badge{display:inline-block;margin-top:8px;padding:3px 9px;border-radius:20px;font-size:12px;font-weight:700;}
+  .pkg-ok{background:#e7f7ec;color:#1a7f3c;}
+  .pkg-warn{background:#fdecea;color:#c0392b;}
   .order-photos{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0;}
   .op{width:96px;}
   .op a{display:block;}
@@ -437,6 +440,7 @@
       <div class="orders-subtabs">
         <button class="subtab active" id="sub-yeni" onclick="setOrderView('yeni')">🆕 Yeni Gelenler <span class="cnt" id="cnt-yeni">0</span></button>
         <button class="subtab" id="sub-hazir" onclick="setOrderView('hazir')">✅ Hazır <span class="cnt" id="cnt-hazir">0</span></button>
+        <button class="subtab" id="sub-teslim" onclick="setOrderView('teslim')">📮 Gönderildi <span class="cnt" id="cnt-teslim">0</span></button>
         <button class="btn btn-mini btn-blue" style="margin-left:auto" onclick="loadOrders()">↻ Yenile</button>
       </div>
       <div id="orders-list" class="orders-grid"><div class="empty">Yükleniyor…</div></div>
@@ -770,6 +774,7 @@ function setOrderView(v){
   orderView=v; orderPage=0;
   document.getElementById('sub-yeni').classList.toggle('active',v==='yeni');
   document.getElementById('sub-hazir').classList.toggle('active',v==='hazir');
+  document.getElementById('sub-teslim').classList.toggle('active',v==='teslim');
   loadOrders();
 }
 async function refreshCounts(){
@@ -777,6 +782,7 @@ async function refreshCounts(){
     const c=await fetch('/orders/sayilar').then(r=>r.json());
     document.getElementById('cnt-yeni').textContent=c.yeni;
     document.getElementById('cnt-hazir').textContent=c.hazir;
+    document.getElementById('cnt-teslim').textContent=c.teslim;
     const nb=document.getElementById('nav-cnt');
     nb.textContent=c.yeni; nb.style.display=c.yeni>0?'inline-block':'none';
     return c;
@@ -791,7 +797,8 @@ async function loadOrders(){
   const orders=await fetch(`/orders?status=${orderView}&limit=${ORDER_PAGE_SIZE}&offset=${offset}`).then(r=>r.json()).catch(()=>[]);
   list.innerHTML=''; ordersById={};
   if(!orders.length){
-    list.innerHTML=`<div class="empty">${orderView==='yeni'?'Bekleyen sipariş yok. 🎉':'Hazır sipariş yok.'}</div>`;
+    const bos={yeni:'Bekleyen sipariş yok. 🎉',hazir:'Gönderilmeyi bekleyen sipariş yok.',teslim:'Henüz gönderilmiş sipariş yok.'};
+    list.innerHTML=`<div class="empty">${bos[orderView]||'Sipariş yok.'}</div>`;
     renderPager(0); return;
   }
   orders.forEach(o=>{ ordersById[o.id]=o; list.appendChild(orderCard(o)); });
@@ -823,21 +830,41 @@ function orderCard(o){
       <div class="oc-row">🖼️ ${o.foto_sayisi} fotoğraf</div>
       <div class="oc-row oc-email">✉️ ${escapeHtml(o.email||'—')}</div>
       <div class="oc-folder">📁 siparis_${String(o.id).padStart(4,'0')}</div>
+      ${paketRozeti(o)}
     </div>
     <div class="oc-actions">${cardActions(o)}</div>`;
   return card;
 }
 
-/* Karttaki aksiyonlar sekmeye gore degisir -- tek basit senaryo:
-   YENI  : editor klasorde duzenler -> "Hazır" der
-   HAZIR : "Gönderime Hazırla" (zip duser) veya "Geri Al" (yeniye doner)
+/* Karttaki aksiyonlar sekmeye gore degisir. Akis:
+   YENI   : editor klasorde duzenler -> "Hazırla ve Paketle" (durum + zip TEK TIKTA)
+   HAZIR  : zip gonderilecek klasorunde bekliyor -> operator yollar -> "Gönderildi"
+   TESLIM : is bitti; yanlislikla basildiysa "Geri Al"
+   Eskiden "Hazır" ve "Gönderime Hazırla" ayri butonlardi; ilkine basip ikincisi
+   unutulunca klasore hicbir sey dusmuyordu ama panel bitmis gorunuyordu.
    onclick'lerde stopPropagation: butona basinca detay modali acilmasin. */
 function cardActions(o){
   if(o.status==='yeni'){
-    return `<button class="oc-ready" onclick="event.stopPropagation();setStatus(${o.id},'hazir')">✓ Hazır</button>`;
+    return `<button class="oc-ready" onclick="event.stopPropagation();setStatus(${o.id},'hazir',this)">✓ Hazırla ve Paketle</button>`;
   }
-  return `<button class="oc-pack" onclick="event.stopPropagation();openOrderDetail(${o.id});gonderimeHazirla(${o.id})">📦 Gönderime Hazırla</button>
-          <button class="oc-back" onclick="event.stopPropagation();setStatus(${o.id},'yeni')" title="Yeniden düzenlemeye al">↩ Geri Al</button>`;
+  if(o.status==='hazir'){
+    return `<button class="oc-pack" onclick="event.stopPropagation();setStatus(${o.id},'teslim',this)" title="Zip'i müşteriye yolladıysanız işaretleyin">📮 Gönderildi</button>
+            <button class="oc-back" onclick="event.stopPropagation();gonderimeHazirla(${o.id},this)" title="Editör dosyalara sonradan dokunduysa zip'i tazele">🔄 Yeniden Paketle</button>
+            <button class="oc-back" onclick="event.stopPropagation();setStatus(${o.id},'yeni',this)" title="Yeniden düzenlemeye al (paket silinir)">↩ Geri Al</button>`;
+  }
+  return `<button class="oc-back" onclick="event.stopPropagation();setStatus(${o.id},'hazir',this)" title="Yanlışlıkla gönderildi işaretlendiyse">↩ Geri Al</button>`;
+}
+
+/* Paket durumu rozeti. Paketin varligi artik DISKTEN degil DB'deki packaged_at'ten
+   okunuyor: operator zip'i alip gonderince (klasorden tasiyinca) rozet kaybolmasin. */
+function paketRozeti(o){
+  if(o.status==='teslim'){
+    return `<span class="pkg-badge pkg-ok">📮 ${o.delivered_at?fmtDate(o.delivered_at)+' gönderildi':'gönderildi'}</span>`;
+  }
+  if(o.status!=='hazir') return '';
+  return o.packaged_at
+    ? `<span class="pkg-badge pkg-ok">📦 paket hazır</span>`
+    : `<span class="pkg-badge pkg-warn">⚠️ paket yok — "Yeniden Paketle"</span>`;
 }
 
 // Detay penceresi
@@ -862,14 +889,28 @@ function openOrderDetail(id){
   const summary = editCount>0
     ? `<div class="edit-summary">🖌️ <span><b>${editCount}</b> fotoğrafta düzenleme isteniyor</span> <span style="color:var(--muted);font-weight:500">(${o.foto_sayisi} fotoğrafın)</span></div>`
     : `<div class="edit-summary none">✓ Bu siparişte özel düzenleme isteği yok (${o.foto_sayisi} fotoğraf)</div>`;
-  const actionBtn = o.status==='yeni'
-    ? `<button class="btn-ready" onclick="markStatusFromDetail(${o.id},'hazir')">✓ Hazır</button>`
-    : `<button class="btn-unready" onclick="markStatusFromDetail(${o.id},'yeni')">↩ Geri Al</button>`;
+  /* Modal aksiyonlari durum akisini izler: yeni -> hazir -> teslim (+ geri alma).
+     'teslim'den dogrudan 'yeni'ye donulemez (sunucu da reddeder); once 'hazir'a gelinir. */
+  let actionBtn;
+  if(o.status==='yeni'){
+    actionBtn=`<button class="btn-ready" onclick="markStatusFromDetail(${o.id},'hazir',this)">✓ Hazırla ve Paketle</button>`;
+  }else if(o.status==='hazir'){
+    actionBtn=`<button class="btn-unready" onclick="markStatusFromDetail(${o.id},'yeni',this)" title="Müşteri tekrar düzenleyebilir; paket silinir">↩ Düzenlemeye Al</button>`;
+  }else{
+    actionBtn=`<button class="btn-unready" onclick="markStatusFromDetail(${o.id},'hazir',this)">↩ Geri Al</button>`;
+  }
   const emailBtn = o.email ? `<button class="copy" onclick="copyEmail(${JSON.stringify(o.email)},this)"><span>📋</span> Kopyala</button>` : '';
-  // Gonderim paketi sadece HAZIR siparislerde anlamli (editor isini bitirmis olmali)
+  /* Paket "Hazırla ve Paketle" ile zaten olustu; burada kalan is onu GONDERMEK.
+     "Yeniden Paketle" sadece editor dosyalara sonradan dokunduysa gerekir. */
   const sendBtn = o.status==='hazir'
-    ? `<button class="btn-send" id="send-btn" onclick="gonderimeHazirla(${o.id})">&#128230; G&#246;nderime Haz&#305;rla</button>`
+    ? `<button class="btn-send" onclick="markStatusFromDetail(${o.id},'teslim',this)" title="Zip'i müşteriye yolladıysanız işaretleyin">📮 Gönderildi</button>
+       <button class="btn-unready" id="send-btn" onclick="gonderimeHazirla(${o.id})">🔄 Yeniden Paketle</button>`
     : '';
+  // Paket durumu satiri: operator zip'in gercekten hazir olup olmadigini modalda da gorsun.
+  const paketSatiri = o.status==='yeni' ? '' : `
+    <div class="row"><span class="lbl">📦 Paket</span> <b>${
+      o.packaged_at ? fmtDate(o.packaged_at)+' hazırlandı' : '⚠️ hazırlanmadı'
+    }</b>${o.delivered_at?' • <b style="color:#1a7f3c">📮 '+fmtDate(o.delivered_at)+' gönderildi</b>':''}</div>`;
   document.getElementById('order-modal-body').innerHTML=`
     <div class="modal-head">
       <div>
@@ -881,6 +922,7 @@ function openOrderDetail(id){
     <div class="modal-info">
       <div class="row"><span class="lbl">📦 Paket</span> <b>${escapeHtml(o.product_name||'—')}</b>${o.toplam_fiyat!=null?' <b style="color:var(--brand)">'+tl(o.toplam_fiyat)+'</b>':''}</div>
       <div class="row"><span class="lbl">✉️ E-posta</span> <b>${escapeHtml(o.email||'—')}</b>${emailBtn}</div>
+      ${paketSatiri}
     </div>
     ${summary}
     <div class="modal-photos">${photos}</div>
@@ -897,37 +939,44 @@ async function copyEmail(email,btn){
     toast('E-posta kopyalandı');
   }catch(e){ toast('Kopyalanamadı — elle seçin: '+email); }
 }
-/* Siparisi gonderime hazirlar: siparis_XXXX klasoru zip'lenip "gonderilecek" klasorune
-   dusurulur. Sistem GONDERMEZ -- operator zip'i alip istedigi yolla yollar. */
-async function gonderimeHazirla(orderId){
-  const btn=document.getElementById('send-btn');
+/* YENIDEN PAKETLE: normal akista paket "Hazırla ve Paketle" ile OTOMATIK olusur; bu yol
+   editor dosyalara sonradan dokunursa zip'i tazelemek icindir. Sistem GONDERMEZ --
+   operator zip'i klasorden alip istedigi yolla yollar.
+   Hem modaldan hem karttan cagrilabilir; modal kapaliyken send-box/send-btn yoktur,
+   o yuzden her sey null-guvenli ve geri bildirim toast'a duser. */
+async function gonderimeHazirla(orderId,kartBtn){
+  const btn=document.getElementById('send-btn')||kartBtn||null;
   const box=document.getElementById('send-box');
-  if(btn){ btn.disabled=true; btn.textContent='\u23f3 Haz\u0131rlan\u0131yor\u2026'; }
+  const eskiEtiket = btn ? btn.innerHTML : null;
+  if(btn){ btn.disabled=true; btn.innerHTML='⏳ Hazırlanıyor…'; }
   try{
     const res=await fetch(`/orders/${orderId}/gonderime-hazirla`,{method:'POST'});
     const d=await res.json().catch(()=>({}));
     if(!res.ok){
-      box.className='send-box warn'; box.style.display='block';
-      box.innerHTML='\u26a0\ufe0f '+escapeHtml(d.detail||'Paket haz\u0131rlanamad\u0131.');
+      const msg=d.detail||'Paket hazırlanamadı.';
+      if(box){ box.className='send-box warn'; box.style.display='block'; box.innerHTML='⚠️ '+escapeHtml(msg); }
+      else{ toast('⚠️ '+msg); }
       return;
     }
-    /* Sade sonuc: paket dustu + (varsa) duzenlenmemis foto uyarisi.
-       Yol/kopyala/indir butonlari KALDIRILDI -- operator zip'i klasorden aliyor,
-       e-posta zaten yukaridaki musteri satirinda kopyalanabiliyor. */
     const eksik = d.duzenlenmemis && d.duzenlenmemis.length;
-    box.className='send-box '+(eksik?'warn':'ok');
-    box.style.display='block';
-    box.innerHTML=`
-      <div><span class="zipname">\ud83d\udce6 ${escapeHtml(d.zip_adi)}</span>
-        &nbsp;·&nbsp; ${d.foto_sayisi} foto\u011fraf &nbsp;·&nbsp; <b>${d.boyut_mb} MB</b>
-        &nbsp;→&nbsp; g&#246;nderilecek klas&#246;r&#252;ne d&#252;&#351;t&#252;</div>
-      ${eksik?`<div style="margin-top:7px">\u26a0\ufe0f ${d.duzenlenmemis.length} foto\u011fraf hi\u00e7 d\u00fczenlenmemi\u015f: ${d.duzenlenmemis.map(escapeHtml).join(', ')}</div>`:''}`;
-    toast('Paket haz\u0131r \ud83d\udce6');
+    if(box){
+      box.className='send-box '+(eksik?'warn':'ok');
+      box.style.display='block';
+      box.innerHTML=`
+        <div><span class="zipname">📦 ${escapeHtml(d.zip_adi)}</span>
+          &nbsp;•&nbsp; ${d.foto_sayisi} fotoğraf &nbsp;•&nbsp; <b>${d.boyut_mb} MB</b>
+          &nbsp;→&nbsp; gönderilecek klasörüne düştü</div>
+        ${eksik?`<div style="margin-top:7px">⚠️ ${d.duzenlenmemis.length} fotoğraf hiç düzenlenmemiş: ${d.duzenlenmemis.map(escapeHtml).join(', ')}</div>`:''}`;
+    }
+    toast(eksik
+      ? `📦 Paket tazelendi — ⚠️ ${eksik} fotoğraf hiç düzenlenmemiş!`
+      : '📦 Paket tazelendi');
+    loadOrders();   // packaged_at degisti -> rozet guncellensin
   }catch(e){
-    box.className='send-box warn'; box.style.display='block';
-    box.textContent='Sunucuya ula\u015f\u0131lamad\u0131.';
+    if(box){ box.className='send-box warn'; box.style.display='block'; box.textContent='Sunucuya ulaşılamadı.'; }
+    else{ toast('Sunucuya ulaşılamadı.'); }
   }finally{
-    if(btn){ btn.disabled=false; btn.innerHTML='\ud83d\udce6 G\u00f6nderime Haz\u0131rla'; }
+    if(btn){ btn.disabled=false; btn.innerHTML=eskiEtiket||'🔄 Yeniden Paketle'; }
   }
 }
 
@@ -939,15 +988,40 @@ async function copyText(metin,btn){
   }catch(e){ toast('Kopyalanamad\u0131: '+metin); }
 }
 
-async function markStatusFromDetail(id,status){
-  await setStatus(id,status);   // PATCH + listeyi yeniler
+async function markStatusFromDetail(id,status,btn){
+  await setStatus(id,status,btn);   // PATCH (+ 'hazir' ise paketleme) + listeyi yeniler
   closeOrderModal();
 }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeOrderModal(); });
-async function setStatus(id,status){
-  const res=await fetch(`/orders/${id}/status`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
-  if(res.ok){toast('Durum güncellendi: '+status.toUpperCase());loadOrders();}
-  else{toast('Güncellenemedi.');}
+/* Durum degistirir. 'hazir'a gecerken SUNUCU ZIP'I DE HAZIRLAR (birkac saniye surebilir --
+   150 MB'lik siparis kopyalanip zip'lenir), o yuzden butonu kilitleyip bekletiyoruz.
+   Cevap {siparis, paket, paket_hatasi} seklinde gelir; paketleme ciktisini operatore
+   gosteriyoruz -- ozellikle "hic duzenlenmemis foto" uyarisini. */
+async function setStatus(id,status,btn){
+  const eskiEtiket = btn ? btn.innerHTML : null;
+  if(btn){ btn.disabled=true; btn.innerHTML = status==='hazir' ? '⏳ Paketleniyor…' : '⏳…'; }
+  try{
+    const res=await fetch(`/orders/${id}/status`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
+    const d=await res.json().catch(()=>({}));
+    if(!res.ok){ toast(d.detail||'Güncellenemedi.'); return; }
+
+    if(d.paket_hatasi){
+      // Durum degisti ama zip olusmadi -- sessiz gecmiyoruz; kart da "paket yok" gosterecek.
+      toast('⚠️ Durum değişti ama paket hazırlanamadı: '+d.paket_hatasi);
+    }else if(d.paket){
+      const eksik=d.paket.duzenlenmemis && d.paket.duzenlenmemis.length;
+      toast(eksik
+        ? `📦 ${d.paket.zip_adi} hazır (${d.paket.boyut_mb} MB) — ⚠️ ${eksik} fotoğraf hiç düzenlenmemiş!`
+        : `📦 ${d.paket.zip_adi} gönderilecek klasörüne düştü (${d.paket.foto_sayisi} foto • ${d.paket.boyut_mb} MB)`);
+    }else{
+      toast('Durum güncellendi: '+status.toUpperCase());
+    }
+    loadOrders();
+  }catch(e){
+    toast('Sunucuya ulaşılamadı.');
+  }finally{
+    if(btn){ btn.disabled=false; btn.innerHTML=eskiEtiket; }
+  }
 }
 
 /* ---------------- OPERATOR GIRISI ---------------- */

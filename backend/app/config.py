@@ -53,16 +53,20 @@ class Settings:
     MAX_UPLOAD_MB: int = int(os.environ.get("MAX_UPLOAD_MB", "60"))  # tek foto ust siniri
     ALLOWED_IMAGE_EXTS: tuple[str, ...] = (".jpg", ".jpeg", ".png")
 
-    # --- Veri klasorleri (prototipteki yapiyla ayni) ---
+    # --- Veri klasorleri ---
     DATA_DIR: Path = PROJECT_DIR / "data"
     RAW_UPLOADS_DIR: Path = DATA_DIR / "raw_uploads"
-    CUSTOMER_FOLDERS_DIR: Path = DATA_DIR / "customer_folders"
-    DEBUG_OUTPUT_DIR: Path = DATA_DIR / "debug_output"
     # Onbellek: filigranli galeri/tam ve filigransiz operator onizlemeleri burada tutulur
-    # (orijinali her istekte decode + filigran basmamak icin). HOTEL_NAME degisirse temizlenmeli.
+    # (orijinali her istekte decode + filigran basmamak icin). Otel adi degisince
+    # settings_service otomatik temizler.
     CACHE_DIR: Path = DATA_DIR / "cache"
-    # Operatorun photoshop sonrasi yukledigi duzenlenmis foto versiyonlari
-    EDITED_DIR: Path = DATA_DIR / "edited"
+    # KALDIRILDI (kullanilmiyorlardi, 2026-09-03):
+    #   CUSTOMER_FOLDERS_DIR -- fiziksel musteri klasoru kopyalama Faz C1'de kaldirildi;
+    #                           musteri-foto iliskisi artik sadece Face tablosunda.
+    #   DEBUG_OUTPUT_DIR     -- prototip (scripts/test_face_detection.py) kalintisi.
+    #   EDITED_DIR           -- teslimatin tek kaynagi siparis klasoru oldugundan (delivery.py)
+    #                           kullanilmiyordu. data/edited klasoru diskte DURUYOR: iki eski
+    #                           OrderItem.edited_path hala oraya isaret ediyor.
 
     # Her siparis, editorun calismasi icin "siparis_XXXX" klasoru olarak buraya yazilir.
     # .env'de ORDERS_EXPORT_DIR ile editorun makinesine PAYLASILAN bir klasore (ya da editor

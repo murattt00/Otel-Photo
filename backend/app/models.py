@@ -116,7 +116,11 @@ class Face(Base):
 class Order(Base):
     """Bir musterinin kioskta olusturdugu siparis (sepet).
 
-    status: "yeni" (operatore dustu) -> "hazir" (basildi/hazirlandi) -> "teslim" (verildi).
+    status akisi:
+      "yeni"   -> musteri olusturdu/guncelledi; operator daha ise baslamadi. TEK duzenlenebilir hal.
+      "hazir"  -> operator photoshop'u bitirdi; zip otomatik hazirlandi. Musteri artik degistiremez.
+      "teslim" -> operator paketi gercekten gonderdi. Dongu burada kapanir.
+
     product_id: secilen albuw/urun turu (None = urun secilmeden serbest -- normalde set edilir).
     email: musterinin e-postasi (dijital kopya/iletisim icin).
     """
@@ -126,12 +130,18 @@ class Order(Base):
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
     product_id: Mapped[int | None] = mapped_column(ForeignKey("products.id"), nullable=True, index=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    status: Mapped[str] = mapped_column(String(20), default="yeni")  # yeni / hazir (/ teslim ileride)
+    status: Mapped[str] = mapped_column(String(20), default="yeni", index=True)  # yeni / hazir / teslim
     note: Mapped[str | None] = mapped_column(Text, nullable=True)    # siparis geneli not
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     # Musteri siparisi SONRADAN duzenlerse buraya zaman yazilir; operator "duzenlendi" rozetini
     # bununla gosterir ve siparis "yeni" sekmesine geri duser.
     revised_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Gonderim zip'inin EN SON ne zaman hazirlandigi. Neden DB'de: paketin varligi eskiden
+    # sadece diskteki zip dosyasindan okunuyordu -- operator zip'i alip gonderince (yani
+    # klasorden tasiyinca) sistem "hic paketlenmemis" saniyordu. Artik kayit DB'de duruyor.
+    packaged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Operatorun "Gonderildi" dedigi an (status='teslim' ile birlikte yazilir).
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     customer: Mapped["Customer"] = relationship(back_populates="orders")
     product: Mapped["Product | None"] = relationship()

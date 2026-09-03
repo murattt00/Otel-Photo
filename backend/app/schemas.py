@@ -128,11 +128,24 @@ class OrderOut(BaseModel):
     revised: bool = False  # musteri sonradan duzenledi mi ("duzenlendi" rozeti)
     foto_sayisi: int
     toplam_fiyat: float | None = None  # serbest: foto basi x foto sayisi, albuw: sabit
+    # Musteri bu siparisi kioskta hala degistirebilir mi? Kural TEK YERDE (models/orders)
+    # belirlenir ve buradan arayuze tasinir -- kiosk kendi basina karar vermesin.
+    duzenlenebilir: bool = True
+    kilit_sebebi: str | None = None   # duzenlenemiyorsa musteriye gosterilecek Turkce sebep
+    packaged_at: datetime | None = None   # gonderim zip'i en son ne zaman hazirlandi
+    delivered_at: datetime | None = None  # operator ne zaman "Gonderildi" dedi
     items: list[OrderItemOut] = []
 
 
 class OrderUpdate(BaseModel):
-    """Mevcut bir siparisi (sepeti) guncelleme. customer_id degismez."""
+    """Mevcut bir siparisi (sepeti) guncelleme. customer_id DEGISMEZ; sadece dogrulama icin
+    istenir: kiosk kendi musterisinin id'sini gonderir, sunucu siparisin sahibiyle karsilastirir.
+    Boylece id artirarak baskasinin siparisini degistirmek engellenir.
+
+    NOT: bu tam bir kimlik dogrulamasi DEGIL (customer_id'yi bilen yine gonderebilir); kiosk
+    oturum token'i eklenene kadar gecerli olan asgari korumadir.
+    """
+    customer_id: int
     product_id: int | None = None
     email: str = Field(..., pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     note: str | None = None
@@ -141,6 +154,18 @@ class OrderUpdate(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     status: str  # yeni / hazir / teslim
+
+
+class OrderStatusResult(BaseModel):
+    """Durum degisikliginin sonucu.
+
+    'hazir'a gecerken zip OTOMATIK hazirlanir; operatorun gormesi gereken paket bilgisi
+    (kac foto, kac MB, hangi fotolar hic duzenlenmemis) bu cevapta doner. Paketleme
+    basarisiz olursa siparis 'hazir' olur ama paket_hatasi dolu gelir -- panel uyarir.
+    """
+    siparis: OrderOut
+    paket: dict | None = None
+    paket_hatasi: str | None = None
 
 
 # ---- Kiosk ----

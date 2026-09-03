@@ -1,28 +1,78 @@
 # --- Python ---
 venv/
+.venv/
 __pycache__/
 *.pyc
 *.pyo
 
 # --- Ortam degiskenleri / sirlar ---
 .env
+.env.*
+!.env.example
 backend/.env
+backend/.env.*
+!backend/.env.example
 
-# --- Veri (fotograflar, kullanici verisi -- repoya girmemeli) ---
-data/raw_uploads/*
-data/customer_folders/*
-data/debug_output/*
-data/cache/*
-data/edited/*
-data/siparisler_export/*
-data/gonderilecek/*
-!data/raw_uploads/.gitkeep
-!data/customer_folders/.gitkeep
-!data/debug_output/.gitkeep
+# ============================================================
+#  VERI -- FOTOGRAFLAR VE MUSTERI VERISI ASLA REPOYA GIRMEZ
+# ============================================================
+# data/ altindaki HER SEY yok sayilir. Tek tek alt klasor saymak yerine tumu
+# kapatiliyor: ileride yeni bir alt klasor acilirsa (arsiv, yedek, thumbnail...)
+# onu .gitignore'a eklemeyi unutmak = fotograflari commitlemek demekti.
+# Klasor yapisi korunsun diye sadece .gitkeep dosyalarina izin var.
+data/**
+!data/**/
+!data/**/.gitkeep
 
-# --- InsightFace model onbellegi ---
-~/.insightface/
+# EMNIYET AGI: gorsel/video/arsiv dosyalari repoda NEREDE olursa olsun yok sayilir.
+# data/ disina dusen (test amacli backend/'e birakilan, ayarlardan repo icine
+# yonlendirilmis siparis/gonderilecek klasoru gibi) dosyalari da yakalar.
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.webp
+*.tif
+*.tiff
+*.heic
+*.heif
+*.psd
+*.psb
+*.raw
+*.cr2
+*.cr3
+*.nef
+*.arw
+*.dng
+*.mp4
+*.mov
+*.avi
+*.zip
+*.rar
+*.7z
 
-# --- IDE ---
+# --- Veritabani yedekleri (pg_dump) ve yerel DB dosyalari ---
+*.sql
+*.dump
+*.backup
+*.sqlite
+*.sqlite3
+*.db
+
+# --- Loglar / gecici dosyalar ---
+*.log
+*.tmp
+.yazma_testi_*
+
+# --- Yuz tanima model onbellegi (buffalo_l vs.) ---
+.insightface/
+models/
+
+# --- IDE / isletim sistemi ---
 .vscode/
+tempCodeRunnerFile.*
 .idea/
+Thumbs.db
+desktop.ini
+.DS_Store
